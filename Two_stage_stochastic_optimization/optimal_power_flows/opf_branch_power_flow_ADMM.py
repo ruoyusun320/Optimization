@@ -242,8 +242,21 @@ def sub_problem( Index, Area):
     modely = Model("sub_opf_y")  # Sub-optimal power flow y update
 
     if Area[Index]["Type"] == "ROOT":# Only needs to meet the KCL equation
-        # xi = [Pgi,Qgi,Pi_x,Qi_x,Vi_x]
-        # zi= [Pi_z,Qi_z,Vi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
+        # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x]
+        # zi= [pi_z,qi_z,Vi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
+        # The following types of constraints should be considered
+        # 1) pi_x = pi_z
+        # 2) qi_x = qi_z
+        # 3) Vi_x = Vi_z
+        # 4) Vi_x = V_A_j_z j in children set of i
+        # 5）Pj_x = Pj_i_z j in children set of i, active power from j to i
+        # 6）Qj_x = Qj_i_z j in children set of i
+        # 7）Ij_x = Ij_i_z j in children set of i
+
+        # Information exchange
+        # In the z update, receive Pj_x, Qj_x, Ij_x and associate Lagrange multiper from children set
+        # In the x update, receive V_A_j_z from children set
+
         Pji_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
         Qij_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Qij")
         VAi_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="VAi")
@@ -253,9 +266,52 @@ def sub_problem( Index, Area):
         Qg = modelx.addVar(lb=Area[Index]["QMIN"], ub=Area[Index]["QMAX"], vtype=GRB.CONTINUOUS, name="Qg")
         Pi_x = modelx.addVar(lb=Area[Index]["PMIN"]-Area[Index]["PD"], ub=Area[Index]["PMAX"]-Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
         Qi_x = modelx.addVar(lb=Area[Index]["QMIN"]-Area[Index]["QD"], ub=Area[Index]["QMAX"]-Area[Index]["QD"], vtype=GRB.CONTINUOUS, name="Qi")
+    elif Area[Index]["Type"] == "LEAF": # Only needs to meet the KVL equation
+        # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
+        # zi = [qi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z]#
+        # The following types of constraints should be considered
+        # 1) pi_x = pi_z
+        # 2) qi_x = qi_z
+        # 3) Vi_x = Vi_z
+        # 4) Ii_x = Ii_z
+        # 5) Pi_x = Pi_z
+        # 6) Qi_x = Qi_z
+        # 7) Pi_x = Pi_j_z j is the ancestor bus of i
+        # 8) Qi_x = Qi_j_z j is the ancestor bus of i
+        # 9) Ii_x = Ii_j_z j is the ancestor bus of i
+        # 10) Vj_x = V_A_i_z  j is the ancestor bus of i
 
+        # Information exchange
+        # In the z update, receive Vj_x and associate Lagrange multiper from ancestor bus
+        # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus
 
+        Pji_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
 
+    else: # Only needs to meet the KVL equation
+        # xi = [Pgi,Qgi,pi_x,pi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
+        # zi = [pi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]#
+        # The following types of constraints should be considered
+        # 1) pi_x = pi_z
+        # 2) qi_x = qi_z
+        # 3) Vi_x = Vi_z
+        # 4) Ii_x = Ii_z
+        # 5) Pi_x = Pi_z
+        # 6) Qi_x = Qi_z
+        # 7) Pi_x = Pi_j_z j is the ancestor bus of i
+        # 8) Qi_x = Qi_j_z j is the ancestor bus of i
+        # 9) Ii_x = Ii_j_z j is the ancestor bus of i
+        # 10) Vi_x = V_A_j_z  j in the children bus of i
+
+        # 11) Vj_x = V_A_i_z j is the ancestor bus of i
+        # 11）Pj_x = Pj_i_z j in children set of i
+        # 12）Qj_x = Qj_i_z j in children set of i
+        # 13）Ij_x = Ij_i_z j in children set of i
+
+        # Information exchange
+        # In the z update, receive Pj_x, Qj_x, Ij_x and associate Lagrange multiper from children set; Vj_x and associate Lagrange multiper from ancestor bus
+        # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus; and V_A_j_z from children set. In the x update, no multiper is required.
+
+        Pji_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
 
 
 
