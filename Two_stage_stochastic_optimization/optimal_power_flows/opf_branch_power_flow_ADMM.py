@@ -102,7 +102,6 @@ def run(mpc):
     for i in range(nb):
         # If the bus is the root bus, only the children information is required.
         if len(area[i]["Ai"]) == 0:
-            print(i)
             expr = 0
             for j in range(len(area[i]["Cbranch"][0])):
                 expr += Pij[area[i]["Cbranch"][0][j]]
@@ -211,14 +210,16 @@ def ancestor_children_generation(branch_f, branch_t, index):
     """
     Area = []
     for i in index:
-        temp = {}
+        temp = { }
         temp["Index"] = i
         if i in branch_t:
             temp["Ai"] = branch_f[where(branch_t == i)] # For each bus, there exits only one ancestor bus, as one connected tree
             temp["Abranch"] = where(branch_t == i)
+            temp["Type"] = "NORM"
         else:
-            temp["Ai"] = []
-            temp["Abranch"] = []
+            temp["Ai"] = [ ]
+            temp["Abranch"] = [ ]
+            temp["Type"] = "ROOT"
 
         if i in branch_f:
             temp["Cbranch"] = where(branch_f == i)
@@ -228,6 +229,38 @@ def ancestor_children_generation(branch_f, branch_t, index):
         Area.append(temp)
 
     return Area
+
+def sub_problem( Index, Area):
+    """
+    Sub-problem optimization for each area, where the area is defined one bus and together with the
+    :param Index: Target area
+    :param Area: Area connection information
+    :return: Area, updated information
+    """
+
+    modelx = Model("sub_opf_x")  # Sub-optimal power flow x update
+    modely = Model("sub_opf_y")  # Sub-optimal power flow y update
+
+    if Area[Index]["Type"] == "ROOT":# Only needs to meet the KCL equation
+        # xi = [Pgi,Qgi,Pi_x,Qi_x,Vi_x]
+        # zi= [Pi_z,Qi_z,Vi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
+        Pji_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
+        Qij_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Qij")
+        VAi_x = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="VAi")
+        Iji = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Iij")
+        Vi = modelx.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Iij")
+        Pg = modelx.addVar(lb=Area[Index]["PMIN"], ub=Area[Index]["PMAX"], vtype=GRB.CONTINUOUS, name="Pg")
+        Qg = modelx.addVar(lb=Area[Index]["QMIN"], ub=Area[Index]["QMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        Pi_x = modelx.addVar(lb=Area[Index]["PMIN"]-Area[Index]["PD"], ub=Area[Index]["PMAX"]-Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
+        Qi_x = modelx.addVar(lb=Area[Index]["QMIN"]-Area[Index]["QD"], ub=Area[Index]["QMAX"]-Area[Index]["QD"], vtype=GRB.CONTINUOUS, name="Qi")
+
+
+
+
+
+
+    return Area
+
 
 
 if __name__ == "__main__":
