@@ -203,7 +203,7 @@ def ancestor_children_generation(branch_f, branch_t, index):
     :param index: Bus index
     :return: Area, ancestor bus, children buses, line among buses
     """
-    Area = []
+    Area = [ ]
     for i in index:
         temp = {}
         temp["Index"] = i
