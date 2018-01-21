@@ -198,151 +198,151 @@ def run(mpc):
 
 
     # Connection matrix
-    # Cg = sparse((ones(ng), (gen[:, GEN_BUS], range(ng))), (nb, ng))
-    # Branch_R = branch[:, BR_R]
-    # Branch_X = branch[:, BR_X]
+    Cg = sparse((ones(ng), (gen[:, GEN_BUS], range(ng))), (nb, ng))
+    Branch_R = branch[:, BR_R]
+    Branch_X = branch[:, BR_X]
 
     # Obtain the boundary information
 
-    # Slmax = branch[:, RATE_A] / baseMVA
+    Slmax = branch[:, RATE_A] / baseMVA
 
-    # Pij_l = -Slmax
-    # Qij_l = -Slmax
-    # Iij_l = zeros(nl)
-    # Vm_l = turn_to_power(bus[:, VMIN], 2)
-    # Pg_l = gen[:, PMIN] / baseMVA
-    # Qg_l = gen[:, QMIN] / baseMVA
-    # Pi_l = -bus[:, PD] / baseMVA + Cg * Pg_l / baseMVA
-    # Qi_l = -bus[:, QD] / baseMVA + Cg * Qg_l / baseMVA
-    #
-    # Pij_u = Slmax
-    # Qij_u = Slmax
-    # Iij_u = Slmax
-    # Vm_u = turn_to_power(bus[:, VMAX], 2)
-    # Pg_u = 2 * gen[:, PMAX] / baseMVA
-    # Qg_u = 2 * gen[:, QMAX] / baseMVA
-    # Pi_u = -bus[:, PD] / baseMVA + Cg * Pg_u / baseMVA
-    # Qi_u = -bus[:, QD] / baseMVA + Cg * Qg_u / baseMVA
-    #
-    # model = Model("OPF")
-    # # Define the decision variables, compact set
-    # Pij = {}
-    # Qij = {}
-    # Iij = {}
-    # Vi = {}
-    # Pg = {}
-    # Qg = {}
-    # Pi = {}
-    # Qi = {}
-    #
-    # for i in range(nl):
-    #     Pij[i] = model.addVar(lb=Pij_l[i], ub=Pij_u[i], vtype=GRB.CONTINUOUS, name="Pij{0}".format(i))
-    #     Qij[i] = model.addVar(lb=Qij_l[i], ub=Qij_u[i], vtype=GRB.CONTINUOUS, name="Qij{0}".format(i))
-    #     Iij[i] = model.addVar(lb=Iij_l[i], ub=Iij_u[i], vtype=GRB.CONTINUOUS, name="Iij{0}".format(i))
-    #
-    # for i in range(nb):
-    #     Vi[i] = model.addVar(lb=Vm_l[i], ub=Vm_u[i], vtype=GRB.CONTINUOUS, name="V{0}".format(i))
-    #
-    # for i in range(ng):
-    #     Pg[i] = model.addVar(lb=Pg_l[i], ub=Pg_u[i], vtype=GRB.CONTINUOUS, name="Pg{0}".format(i))
-    #     Qg[i] = model.addVar(lb=Qg_l[i], ub=Qg_u[i], vtype=GRB.CONTINUOUS, name="Qg{0}".format(i))
-    # for i in range(nb):
-    #     Pi[i] = model.addVar(lb=Pi_l[i], ub=Pi_u[i], vtype=GRB.CONTINUOUS, name="Pi{0}".format(i))
-    #     Qi[i] = model.addVar(lb=Qi_l[i], ub=Qi_u[i], vtype=GRB.CONTINUOUS, name="Qi{0}".format(i))
+    Pij_l = -Slmax
+    Qij_l = -Slmax
+    Iij_l = zeros(nl)
+    Vm_l = turn_to_power(bus[:, VMIN], 2)
+    Pg_l = gen[:, PMIN] / baseMVA
+    Qg_l = gen[:, QMIN] / baseMVA
+    Pi_l = -bus[:, PD] / baseMVA + Cg * Pg_l / baseMVA
+    Qi_l = -bus[:, QD] / baseMVA + Cg * Qg_l / baseMVA
+
+    Pij_u = Slmax
+    Qij_u = Slmax
+    Iij_u = Slmax
+    Vm_u = turn_to_power(bus[:, VMAX], 2)
+    Pg_u = 2 * gen[:, PMAX] / baseMVA
+    Qg_u = 2 * gen[:, QMAX] / baseMVA
+    Pi_u = -bus[:, PD] / baseMVA + Cg * Pg_u # Boundary error
+    Qi_u = -bus[:, QD] / baseMVA + Cg * Qg_u # Boundary error
+
+    model = Model("OPF")
+    # Define the decision variables, compact set
+    Pij = {}
+    Qij = {}
+    Iij = {}
+    Vi = {}
+    Pg = {}
+    Qg = {}
+    Pi = {}
+    Qi = {}
+
+    for i in range(nl):
+        Pij[i] = model.addVar(lb=Pij_l[i], ub=Pij_u[i], vtype=GRB.CONTINUOUS, name="Pij{0}".format(i))
+        Qij[i] = model.addVar(lb=Qij_l[i], ub=Qij_u[i], vtype=GRB.CONTINUOUS, name="Qij{0}".format(i))
+        Iij[i] = model.addVar(lb=Iij_l[i], ub=Iij_u[i], vtype=GRB.CONTINUOUS, name="Iij{0}".format(i))
+
+    for i in range(nb):
+        Vi[i] = model.addVar(lb=Vm_l[i], ub=Vm_u[i], vtype=GRB.CONTINUOUS, name="V{0}".format(i))
+
+    for i in range(ng):
+        Pg[i] = model.addVar(lb=Pg_l[i], ub=Pg_u[i], vtype=GRB.CONTINUOUS, name="Pg{0}".format(i))
+        Qg[i] = model.addVar(lb=Qg_l[i], ub=Qg_u[i], vtype=GRB.CONTINUOUS, name="Qg{0}".format(i))
+    for i in range(nb):
+        Pi[i] = model.addVar(lb=Pi_l[i], ub=Pi_u[i], vtype=GRB.CONTINUOUS, name="Pi{0}".format(i))
+        Qi[i] = model.addVar(lb=Qi_l[i], ub=Qi_u[i], vtype=GRB.CONTINUOUS, name="Qi{0}".format(i))
     # For each area, before decomposition
     # Add system level constraints
-    # for i in range(nb):
-    #     # If the bus is the root bus, only the children information is required.
-    #     if len(area[i]["Ai"]) == 0:
-    #         expr = 0
-    #         for j in range(len(area[i]["Cbranch"][0])):
-    #             expr += Pij[area[i]["Cbranch"][0][j]]
-    #
-    #         model.addConstr(lhs=expr - Pi[i], sense=GRB.EQUAL, rhs=0)
-    #
-    #         expr = 0
-    #         for j in range(len(area[i]["Cbranch"][0])):
-    #             expr += Qij[area[i]["Cbranch"][0][j]]
-    #
-    #         model.addConstr(lhs=expr - Qi[i], sense=GRB.EQUAL, rhs=0)
-    #
-    #     elif len(area[i]["Cbranch"]) == 0:  # This bus is the lead node
-    #         model.addConstr(
-    #             lhs=Pij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_R[area[i]["Abranch"][0][0]] +
-    #                 Pi[i], sense=GRB.EQUAL, rhs=0)
-    #         model.addConstr(
-    #             lhs=Qij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_X[area[i]["Abranch"][0][0]] +
-    #                 Qi[i], sense=GRB.EQUAL, rhs=0)
-    #
-    #         model.addConstr(lhs=Vi[area[i]["Ai"][0]] - Vi[i] - 2 * Branch_R[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] - 2 * Branch_X[area[i]["Abranch"][0][0]] * Qij[area[i]["Abranch"][0][0]] +
-    #                             Iij[area[i]["Abranch"][0][0]] * (Branch_R[area[i]["Abranch"][0][0]] ** 2 + Branch_X[area[i]["Abranch"][0][0]] ** 2),
-    #                         sense=GRB.EQUAL, rhs=0)
-    #
-    #         model.addConstr(
-    #             Pij[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] + Qij[area[i]["Abranch"][0][0]] * Qij[
-    #                 area[i]["Abranch"][0][0]] <= Vi[area[i]["Ai"][0]] *
-    #             Iij[area[i]["Abranch"][0][0]], name="rc{0}".format(i))
-    #     else:
-    #         expr = 0
-    #         for j in range(len(area[i]["Cbranch"][0])):
-    #             expr += Pij[area[i]["Cbranch"][0][j]]
-    #         model.addConstr(
-    #             lhs=Pij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_R[area[i]["Abranch"][0][0]] +
-    #                 Pi[i] - expr , sense=GRB.EQUAL, rhs=0)
-    #         expr = 0
-    #         for j in range(len(area[i]["Cbranch"][0])):
-    #             expr += Qij[area[i]["Cbranch"][0][j]]
-    #
-    #         model.addConstr(
-    #             lhs=Qij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_X[area[i]["Abranch"][0][0]] +
-    #                 Qi[i] - expr, sense=GRB.EQUAL, rhs=0)
-    #
-    #         model.addConstr(lhs=Vi[area[i]["Ai"][0]] - Vi[i] - 2 * Branch_R[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] - 2 * Branch_X[area[i]["Abranch"][0][0]] * Qij[area[i]["Abranch"][0][0]] +
-    #                             Iij[area[i]["Abranch"][0][0]] * (Branch_R[area[i]["Abranch"][0][0]] ** 2 + Branch_X[area[i]["Abranch"][0][0]] ** 2),
-    #                         sense=GRB.EQUAL, rhs=0)
-    #
-    #         model.addConstr(
-    #             Pij[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] + Qij[area[i]["Abranch"][0][0]] * Qij[area[i]["Abranch"][0][0]] <= Vi[area[i]["Ai"][0]] *
-    #             Iij[area[i]["Abranch"][0][0]], name="rc{0}".format(i))
-    # obj = 0
-    # for i in range(ng):
-    #     model.addConstr(lhs = Pg[i] - Pi[int(gen[i, GEN_BUS])], sense=GRB.EQUAL, rhs=bus[int(gen[i, GEN_BUS]), PD] / baseMVA)
-    #     model.addConstr(lhs = Qg[i] - Qi[int(gen[i, GEN_BUS])], sense=GRB.EQUAL, rhs=bus[int(gen[i, GEN_BUS]), QD] / baseMVA)
-    #     obj += gencost[i, 4] * Pg[i] * Pg[i] * baseMVA * baseMVA + gencost[i, 5] * Pg[i] * baseMVA + gencost[i, 6]
-    #
-    #
-    # model.setObjective(obj)
-    # model.Params.OutputFlag = 0
-    # model.Params.LogToConsole = 0
-    # model.Params.DisplayInterval = 1
-    # model.optimize()
-    #
-    # Pij = []
-    # Qij = []
-    # Iij = []
-    # Vi = []
-    # Pg = []
-    # Qg = []
-    # Pi = []
-    # Qi = []
-    #
-    # for i in range(nl):
-    #     Pij.append(model.getVarByName("Pij{0}".format(i)).X)
-    #     Qij.append(model.getVarByName("Qij{0}".format(i)).X)
-    #     Iij.append(model.getVarByName("Iij{0}".format(i)).X)
-    #
-    # for i in range(nb):
-    #     Vi.append(model.getVarByName("V{0}".format(i)).X)
-    #     Pi.append(model.getVarByName("Pi{0}".format(i)).X)
-    #     Qi.append(model.getVarByName("Qi{0}".format(i)).X)
-    #
-    # for i in range(ng):
-    #     Pg.append(model.getVarByName("Pg{0}".format(i)).X)
-    #     Qg.append(model.getVarByName("Qg{0}".format(i)).X)
-    #
-    # obj = obj.getValue()
-    #
-    #
+    for i in range(nb):
+        # If the bus is the root bus, only the children information is required.
+        if len(area[i]["Ai"]) == 0:
+            expr = 0
+            for j in range(len(area[i]["Cbranch"][0])):
+                expr += Pij[area[i]["Cbranch"][0][j]]
+
+            model.addConstr(lhs = expr - Pi[i], sense=GRB.EQUAL, rhs=0)
+
+            expr = 0
+            for j in range(len(area[i]["Cbranch"][0])):
+                expr += Qij[area[i]["Cbranch"][0][j]]
+
+            model.addConstr(lhs=expr - Qi[i], sense=GRB.EQUAL, rhs=0)
+
+        elif len(area[i]["Cbranch"]) == 0:  # This bus is the lead node
+            model.addConstr(
+                lhs=Pij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_R[area[i]["Abranch"][0][0]] +
+                    Pi[i], sense=GRB.EQUAL, rhs=0)
+            model.addConstr(
+                lhs=Qij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_X[area[i]["Abranch"][0][0]] +
+                    Qi[i], sense=GRB.EQUAL, rhs=0)
+
+            model.addConstr(lhs=Vi[int(area[i]["Ai"][0])] - Vi[i] - 2 * Branch_R[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] - 2 * Branch_X[area[i]["Abranch"][0][0]] * Qij[area[i]["Abranch"][0][0]] +
+                                Iij[area[i]["Abranch"][0][0]] * (Branch_R[area[i]["Abranch"][0][0]] ** 2 + Branch_X[area[i]["Abranch"][0][0]] ** 2),
+                            sense=GRB.EQUAL, rhs=0)
+
+            model.addConstr(
+                Pij[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] + Qij[area[i]["Abranch"][0][0]] * Qij[
+                    area[i]["Abranch"][0][0]] <= Vi[area[i]["Ai"][0]] *
+                Iij[area[i]["Abranch"][0][0]], name="rc{0}".format(i))
+        else:
+            expr = 0
+            for j in range(len(area[i]["Cbranch"][0])):
+                expr += Pij[area[i]["Cbranch"][0][j]]
+            model.addConstr(
+                lhs=Pij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_R[area[i]["Abranch"][0][0]] +
+                    Pi[i] - expr , sense=GRB.EQUAL, rhs=0)
+            expr = 0
+            for j in range(len(area[i]["Cbranch"][0])):
+                expr += Qij[area[i]["Cbranch"][0][j]]
+
+            model.addConstr(
+                lhs=Qij[area[i]["Abranch"][0][0]] - Iij[area[i]["Abranch"][0][0]] * Branch_X[area[i]["Abranch"][0][0]] +
+                    Qi[i] - expr, sense=GRB.EQUAL, rhs=0)
+
+            model.addConstr(lhs=Vi[int(area[i]["Ai"][0])] - Vi[i] - 2 * Branch_R[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] - 2 * Branch_X[area[i]["Abranch"][0][0]] * Qij[area[i]["Abranch"][0][0]] +
+                                Iij[area[i]["Abranch"][0][0]] * (Branch_R[area[i]["Abranch"][0][0]] ** 2 + Branch_X[area[i]["Abranch"][0][0]] ** 2),
+                            sense=GRB.EQUAL, rhs=0)
+
+            model.addConstr(
+                Pij[area[i]["Abranch"][0][0]] * Pij[area[i]["Abranch"][0][0]] + Qij[area[i]["Abranch"][0][0]] * Qij[area[i]["Abranch"][0][0]] <= Vi[area[i]["Ai"][0]] *
+                Iij[area[i]["Abranch"][0][0]], name="rc{0}".format(i))
+    obj = 0
+    for i in range(ng):
+        model.addConstr(lhs = Pg[i] - Pi[int(gen[i, GEN_BUS])], sense=GRB.EQUAL, rhs=bus[int(gen[i, GEN_BUS]), PD] / baseMVA)
+        model.addConstr(lhs = Qg[i] - Qi[int(gen[i, GEN_BUS])], sense=GRB.EQUAL, rhs=bus[int(gen[i, GEN_BUS]), QD] / baseMVA)
+        obj += gencost[i, 4] * Pg[i] * Pg[i] * baseMVA * baseMVA + gencost[i, 5] * Pg[i] * baseMVA + gencost[i, 6]
+
+
+    model.setObjective(obj)
+    model.Params.OutputFlag = 0
+    model.Params.LogToConsole = 0
+    model.Params.DisplayInterval = 1
+    model.optimize()
+
+    Pij = []
+    Qij = []
+    Iij = []
+    Vi = []
+    Pg = []
+    Qg = []
+    Pi = []
+    Qi = []
+
+    for i in range(nl):
+        Pij.append(model.getVarByName("Pij{0}".format(i)).X)
+        Qij.append(model.getVarByName("Qij{0}".format(i)).X)
+        Iij.append(model.getVarByName("Iij{0}".format(i)).X)
+
+    for i in range(nb):
+        Vi.append(model.getVarByName("V{0}".format(i)).X)
+        Pi.append(model.getVarByName("Pi{0}".format(i)).X)
+        Qi.append(model.getVarByName("Qi{0}".format(i)).X)
+
+    for i in range(ng):
+        Pg.append(model.getVarByName("Pg{0}".format(i)).X)
+        Qg.append(model.getVarByName("Qg{0}".format(i)).X)
+
+    obj = obj.getValue()
+
+
     primal_residual = []
 
     for i in range(nl):
@@ -395,3 +395,4 @@ if __name__ == "__main__":
     gap = 100 * (result["f"] - obj) / obj
 
     print(gap)
+    print(residual)
