@@ -4,10 +4,10 @@ Two stage stochastic optimization problem for the hybrid AC/DC microgrid embedde
 @mail: zhaoty@ntu.edu.sg
 @date:27 Jan 2018
 """
-from numpy import array, arange
+from numpy import array, arange, zeros
 from matplotlib import pyplot
 from scipy import interpolate
-
+from random import random
 
 def problem_formulation(N, delta, weight_factor):
     """
@@ -24,8 +24,11 @@ def problem_formulation(N, delta, weight_factor):
     DC_PD_cap = 10
     HD_cap = 5
     CD_cap = 5
-    T_first_stage = 24
 
+    Delta_first_stage = 1
+    Delta_second_stage = 0.25
+    T_first_stage = 24
+    T_second_stage = int(T_first_stage/Delta_second_stage)
     # AC electrical demand
     AC_PD = array([323.0284, 308.2374, 318.1886, 307.9809, 331.2170, 368.6539, 702.0040, 577.7045, 1180.4547, 1227.6240,
                    1282.9344, 1311.9738, 1268.9502, 1321.7436, 1323.9218, 1327.1464, 1386.9117, 1321.6387, 1132.0476,
@@ -61,16 +64,14 @@ def problem_formulation(N, delta, weight_factor):
 
     PV_PG = PV_PG * PV_cap
     # Modify the first stage profiles
-    AC_PD = AC_PD / 2
-    DC_PD = DC_PD / 2
     AC_PD = (AC_PD / max(AC_PD)) * AC_PD_cap
     DC_PD = (DC_PD / max(DC_PD)) * DC_PD_cap
     HD = (HD / max(HD)) * HD_cap
     CD = (CD / max(CD)) * CD_cap
 
     # Generate the second stage profiles using spline of scipy
-    Time_first_stage = arange(0, T_first_stage, 1)
-    Time_second_stage = arange(0, T_first_stage, 0.25)
+    Time_first_stage = arange(0, T_first_stage, Delta_first_stage)
+    Time_second_stage = arange(0, T_first_stage, Delta_second_stage)
 
     AC_PD_tck = interpolate.splrep(Time_first_stage, AC_PD, s=0)
     DC_PD_tck = interpolate.splrep(Time_first_stage, DC_PD, s=0)
@@ -93,6 +94,22 @@ def problem_formulation(N, delta, weight_factor):
     pyplot.show()
 
     # Generate profiles for each scenarion in the second stage
+    AC_PD_scenario = zeros(shape=(N,T_second_stage))
+    DC_PD_scenario = zeros(shape=(N, T_second_stage))
+    HD_scenario = zeros(shape=(N, T_second_stage))
+    CD_scenario = zeros(shape=(N, T_second_stage))
+    PV_PG_scenario = zeros(shape=(N, T_second_stage))
+
+    for i in range(N):
+        for j in range(T_second_stage):
+            AC_PD_scenario[i, j] = AC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
+            DC_PD_scenario[i, j] = DC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
+            HD_scenario[i, j] = HD_second_stage[j] * (1 - delta + 2 * delta * random())
+            CD_scenario[i, j] = CD_second_stage[j] * (1 - delta + 2 * delta * random())
+            PV_PG_scenario[i, j] = PV_PG_second_stage[j] * (1 - delta + 2 * delta * random())
+
+    # Formulation of the two-stage optimization problem
+
 
     model = {}
     return model  # Formulated mixed integer linear programming problem
