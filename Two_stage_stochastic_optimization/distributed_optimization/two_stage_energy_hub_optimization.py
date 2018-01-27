@@ -16,10 +16,13 @@ def problem_formulation(N, delta, weight_factor):
     :param weight_factor: weight factor between the first stage decision making and second stage decision makin
     :return:
     """
-
+    # Parameters settings for the
     PHVDC_max = 50
     PV_cap = 20
     AC_PD_cap = 10
+    DC_PD_cap = 10
+    HD_cap = 5
+    CD_cap = 5
 
     # AC electrical demand
     AC_PD = array([323.0284, 308.2374, 318.1886, 307.9809, 331.2170, 368.6539, 702.0040, 577.7045, 1180.4547, 1227.6240,
@@ -44,7 +47,10 @@ def problem_formulation(N, delta, weight_factor):
 
     AC_PD = AC_PD / 2
     DC_PD = DC_PD / 2
-    AC_PD = (AC_PD/max(AC_PD))*AC_PD_cap
+    AC_PD = (AC_PD / max(AC_PD)) * AC_PD_cap
+    DC_PD = (DC_PD / max(DC_PD)) * DC_PD_cap
+    HD = (HD / max(HD)) * HD_cap
+    CD = (CD / max(CD)) * CD_cap
 
     pyplot.plot(AC_PD)
     pyplot.ylabel('Electrical load profile')
