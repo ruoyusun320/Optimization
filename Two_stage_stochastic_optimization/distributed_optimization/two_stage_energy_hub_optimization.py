@@ -4,9 +4,9 @@ Two stage stochastic optimization problem for the hybrid AC/DC microgrid embedde
 @mail: zhaoty@ntu.edu.sg
 @date:27 Jan 2018
 """
-from numpy import array
+from numpy import array,arange
 from matplotlib import pyplot
-
+from scipy import interpolate
 
 def problem_formulation(N, delta, weight_factor):
     """
@@ -23,6 +23,7 @@ def problem_formulation(N, delta, weight_factor):
     DC_PD_cap = 10
     HD_cap = 5
     CD_cap = 5
+    T_first_stage = 24
 
     # AC electrical demand
     AC_PD = array([323.0284, 308.2374, 318.1886, 307.9809, 331.2170, 368.6539, 702.0040, 577.7045, 1180.4547, 1227.6240,
@@ -44,7 +45,7 @@ def problem_formulation(N, delta, weight_factor):
     PV_PG = array([0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.03, 0.05, 0.17, 0.41, 0.63, 0.86, 0.94, 1.00, 0.95, 0.81, 0.59, 0.35,
          0.14, 0.02, 0.02, 0.00, 0.00, 0.00])
     PV_PG = PV_PG*PV_cap
-
+    # Modify the first stage profiles
     AC_PD = AC_PD / 2
     DC_PD = DC_PD / 2
     AC_PD = (AC_PD / max(AC_PD)) * AC_PD_cap
@@ -52,8 +53,28 @@ def problem_formulation(N, delta, weight_factor):
     HD = (HD / max(HD)) * HD_cap
     CD = (CD / max(CD)) * CD_cap
 
-    pyplot.plot(AC_PD)
-    pyplot.ylabel('Electrical load profile')
+    # Generate the second stage profiles using spline of scipy
+    Time_first_stage = arange(0,T_first_stage,1)
+    Time_second_stage = arange(0,T_first_stage,0.25)
+
+    AC_PD_tck = interpolate.splrep(Time_first_stage, AC_PD, s=0)
+    DC_PD_tck = interpolate.splrep(Time_first_stage, DC_PD, s=0)
+    HD_tck = interpolate.splrep(Time_first_stage, HD, s=0)
+    CD_tck = interpolate.splrep(Time_first_stage, CD, s=0)
+    PV_PG_tck = interpolate.splrep(Time_first_stage, PV_PG, s=0)
+
+    AC_PD_second_stage = interpolate.splev(Time_second_stage, AC_PD_tck, der=0)
+    DC_PD_second_stage = interpolate.splev(Time_second_stage, DC_PD_tck, der=0)
+    HD_second_stage = interpolate.splev(Time_second_stage, HD_tck, der=0)
+    CD_second_stage = interpolate.splev(Time_second_stage, CD_tck, der=0)
+    PV_PG_second_stage = interpolate.splev(Time_second_stage, PV_PG_tck, der=0)
+
+    pyplot.plot(Time_first_stage, AC_PD, 'x', Time_second_stage, AC_PD_second_stage, 'b')
+    pyplot.plot(Time_first_stage, DC_PD, 'x', Time_second_stage, DC_PD_second_stage, 'b')
+    pyplot.plot(Time_first_stage, HD, 'x', Time_second_stage, HD_second_stage, 'b')
+    pyplot.plot(Time_first_stage, CD, 'x', Time_second_stage, CD_second_stage, 'b')
+    pyplot.plot(Time_first_stage, PV_PG, 'x', Time_second_stage, PV_PG_second_stage, 'b')
+
     pyplot.show()
 
     model = {}
