@@ -24,7 +24,7 @@ def problem_formulation(N, delta, weight_factor):
     eff_HVDC = 0.9
     Pess_ch_max = 10
     Pess_dc_max = 10
-    eff_dis = 0.9
+    eff_dc = 0.9
     eff_ch = 0.9
     E0 = 10
     Emax = 20
@@ -141,17 +141,63 @@ def problem_formulation(N, delta, weight_factor):
         G[i] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS, name="G{0}".format(i))
         PAC2DC[i] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS, name="A2D{0}".format(i))
         PDC2AC[i] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS, name="D2A{0}".format(i))
-        PHVAC[i] = model.addVar(lb=0, ub=PHVDC_max, vtype=GRB.CONTINUOUS, name="G{0}".format(i))
-        Eess[i] = model.addVar(lb=Emin, ub=Emax, vtype=GRB.CONTINUOUS, name="E{0}".format(i))
+        PHVAC[i] = model.addVar(lb=0, ub=PHVDC_max, vtype=GRB.CONTINUOUS, name="PHVAC{0}".format(i))
+        Eess[i] = model.addVar(lb=Emin, ub=Emax, vtype=GRB.CONTINUOUS, name="Eess{0}".format(i))
         Pess_dc[i] = model.addVar(lb=0, ub=Pess_dc_max, vtype=GRB.CONTINUOUS, name="Pess_dc{0}".format(i))
-        Pess_ch[i] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS, name="Pess_c{0}".format(i))
+        Pess_ch[i] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS, name="Pess_ch{0}".format(i))
 
     obj = 0
     for i in range(T_first_stage):
-        obj += G[i]*Gas_price+Electric_price*Pug[i]+Eess_cost*(Pess_ch[i]+Pess_dc[i])
-    model = {}
-    return model  # Formulated mixed integer linear programming problem
+        obj = obj + G[i] * Gas_price + Electric_price[i] * Pug[i] + Eess_cost * (Pess_ch[i] + Pess_dc[i])
+
+    # set the objective functions
+    model.setObjective(obj)
+    for i in range(T_first_stage):
+        model.addConstr(G[i] * eff_CHP_h == HD[i])
+        model.addConstr(PHVAC[i] * eff_HVDC == CD[i])
+        model.addConstr(Pug[i] + G[i] * eff_CHP_e + eff_BIC * PDC2AC[i] == AC_PD[i] + PAC2DC[i])
+        model.addConstr(Pess_dc[i] - Pess_ch[i] + eff_BIC * PAC2DC[i] + PV_PG[i] == DC_PD[i] + PDC2AC[i])
+        if i == 0:
+            model.addConstr(Eess[i] - E0 == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
+        else:
+            model.addConstr(Eess[i] - Eess[i - 1] == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
+
+    model.optimize()
+    pug = []
+    g = []
+    pAC2DC = []
+    pDC2AC = []
+    pHVAC = []
+    eess = []
+    pess_dc = []
+    pess_ch = []
+
+    for i in range(T_first_stage):
+        pug.append(model.getVarByName("Pug{0}".format(i)).X)
+        g.append(model.getVarByName("G{0}".format(i)).X)
+        pAC2DC.append(model.getVarByName("A2D{0}".format(i)).X)
+        pDC2AC.append(model.getVarByName("D2A{0}".format(i)).X)
+        pHVAC.append(model.getVarByName("PHVAC{0}".format(i)).X)
+        eess.append(model.getVarByName("Eess{0}".format(i)).X)
+        pess_dc.append(model.getVarByName("Pess_dc{0}".format(i)).X)
+        pess_ch.append(model.getVarByName("Pess_ch{0}".format(i)).X)
+
+    obj = obj.getValue()
+
+    result = {"PUG": pug,
+              "G": g,
+              "PAC2DC": pAC2DC,
+              "PDC2AC": pDC2AC,
+              "PHVAC": pHVAC,
+              "Eess": eess,
+              "Pess_dc": pess_dc,
+              "Pess_ch": pess_ch,
+              "obj": obj
+              }
+    return result  # Formulated mixed integer linear programming problem
 
 
 if __name__ == "__main__":
+
     model = problem_formulation(50, 0.03, 0)
+    print(model)
