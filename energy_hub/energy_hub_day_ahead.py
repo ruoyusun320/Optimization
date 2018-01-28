@@ -11,7 +11,7 @@ from random import random
 from gurobipy import *
 
 
-def problem_formulation(N, delta, weight_factor):
+def main(N, delta, weight_factor):
     """
     Jointed optimization for the electrical and thermal optimisation
     :param N: number of scenario
@@ -86,45 +86,6 @@ def problem_formulation(N, delta, weight_factor):
     HD = (HD / max(HD)) * HD_cap
     CD = (CD / max(CD)) * CD_cap
 
-    # Generate the second stage profiles using spline of scipy
-    Time_first_stage = arange(0, T_first_stage, Delta_first_stage)
-    Time_second_stage = arange(0, T_first_stage, Delta_second_stage)
-
-    AC_PD_tck = interpolate.splrep(Time_first_stage, AC_PD, s=0)
-    DC_PD_tck = interpolate.splrep(Time_first_stage, DC_PD, s=0)
-    HD_tck = interpolate.splrep(Time_first_stage, HD, s=0)
-    CD_tck = interpolate.splrep(Time_first_stage, CD, s=0)
-    PV_PG_tck = interpolate.splrep(Time_first_stage, PV_PG, s=0)
-
-    AC_PD_second_stage = interpolate.splev(Time_second_stage, AC_PD_tck, der=0)
-    DC_PD_second_stage = interpolate.splev(Time_second_stage, DC_PD_tck, der=0)
-    HD_second_stage = interpolate.splev(Time_second_stage, HD_tck, der=0)
-    CD_second_stage = interpolate.splev(Time_second_stage, CD_tck, der=0)
-    PV_PG_second_stage = interpolate.splev(Time_second_stage, PV_PG_tck, der=0)
-
-    # Check the result
-    pyplot.plot(Time_first_stage, AC_PD, 'x', Time_second_stage, AC_PD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, DC_PD, 'x', Time_second_stage, DC_PD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, HD, 'x', Time_second_stage, HD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, CD, 'x', Time_second_stage, CD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, PV_PG, 'x', Time_second_stage, PV_PG_second_stage, 'b')
-    pyplot.show()
-
-    # Generate profiles for each scenarion in the second stage
-    AC_PD_scenario = zeros(shape=(N, T_second_stage))
-    DC_PD_scenario = zeros(shape=(N, T_second_stage))
-    HD_scenario = zeros(shape=(N, T_second_stage))
-    CD_scenario = zeros(shape=(N, T_second_stage))
-    PV_PG_scenario = zeros(shape=(N, T_second_stage))
-
-    for i in range(N):
-        for j in range(T_second_stage):
-            AC_PD_scenario[i, j] = AC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
-            DC_PD_scenario[i, j] = DC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
-            HD_scenario[i, j] = HD_second_stage[j] * (1 - delta + 2 * delta * random())
-            CD_scenario[i, j] = CD_second_stage[j] * (1 - delta + 2 * delta * random())
-            PV_PG_scenario[i, j] = PV_PG_second_stage[j] * (1 - delta + 2 * delta * random())
-
     # Formulation of the two-stage optimization problem
     # 1) First stage optimization problems
     model = Model("EnergyHub")
@@ -161,7 +122,6 @@ def problem_formulation(N, delta, weight_factor):
             model.addConstr(Eess[i] - Eess[i - 1] == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
 
     # 2) second stage optimisation
-    
 
     # set the objective function
     model.setObjective(obj)
@@ -207,6 +167,5 @@ def problem_formulation(N, delta, weight_factor):
 
 
 if __name__ == "__main__":
-
-    model = problem_formulation(50, 0.03, 0)
-    print(model)
+    result = main(50, 0.03, 0)
+    print(result)
