@@ -5,7 +5,11 @@ The purpose is to introduce slack variables to formulate a decentralized optimiz
 The centralized model (24a)
 References:
     [1]Peng, Qiuyu, and Steven H. Low. "Distributed optimal power flow algorithm for radial networks, I: Balanced single phase case." IEEE Transactions on Smart Grid (2016).
-# Each bus
+# Each bus is equivalent
+# xi=[Pi,Qi,li,vi,pi,qi,pgi,pdi]
+# yij=[Pi,Qi,li,vi,pi,qi,vCi,PiAi,QiAi,liAi]
+# for each y, its size might be changed
+# In total, the size of y equals to 5*nb+3*nl+nl
 """
 
 from Two_stage_stochastic_optimization.power_flow_modelling import case33
@@ -53,6 +57,10 @@ def run(mpc):
     bus[:, PD] = bus[:, PD] / baseMVA
     bus[:, QD] = bus[:, QD] / baseMVA
     area = ancestor_children_generation(f, t, range(nb), Branch_R, Branch_X, Slmax, gen, bus, gencost)
+    nci= []
+    for i in range(nb):
+        nci.append(len(area[i]["Ci"]))
+
     # Formulate the centralized optimization problem according to the information provided by area
     model = Model("OPF")
     # Define the decision variables, compact set
