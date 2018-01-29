@@ -1,10 +1,11 @@
 """
 ADMM based distributed optimal power flow
 The power flow modelling is based on the branch power flow
-
+The purpose is to introduce slack variables to formulate a decentralized optimization problem.
+The centralized model (24a)
 References:
     [1]Peng, Qiuyu, and Steven H. Low. "Distributed optimal power flow algorithm for radial networks, I: Balanced single phase case." IEEE Transactions on Smart Grid (2016).
-    The centralized model (1)
+# Each bus
 """
 
 from Two_stage_stochastic_optimization.power_flow_modelling import case33
@@ -19,6 +20,7 @@ from pypower.idx_cost import MODEL, NCOST, PW_LINEAR, COST, POLYNOMIAL
 from pypower.idx_bus import BUS_TYPE, REF, VA, VM, PD, GS, VMAX, VMIN, BUS_I, QD
 from pypower.idx_gen import GEN_BUS, VG, PG, QG, PMAX, PMIN, QMAX, QMIN
 from pypower.ext2int import ext2int
+
 
 def run(mpc):
     """
@@ -50,7 +52,7 @@ def run(mpc):
     gencost[:, 5] = gencost[:, 5] * baseMVA
     bus[:, PD] = bus[:, PD] / baseMVA
     bus[:, QD] = bus[:, QD] / baseMVA
-    area = ancestor_children_generation(f, t, range(nb),Branch_R,Branch_X, Slmax, gen, bus,gencost )
+    area = ancestor_children_generation(f, t, range(nb), Branch_R, Branch_X, Slmax, gen, bus, gencost)
     # Formulate the centralized optimization problem according to the information provided by area
     model = Model("OPF")
     # Define the decision variables, compact set
@@ -69,7 +71,7 @@ def run(mpc):
     Pi_y = {}
     Qi_y = {}
     obj = 0
-    for i in range(nb):# The iteration from each bus
+    for i in range(nb):  # The iteration from each bus
         Pij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
                                 name="Pij_x{0}".format(i))
         Qij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
@@ -94,7 +96,7 @@ def run(mpc):
         Pi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pi_y{0}".format(i))
         Qi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qi_y{0}".format(i))
 
-        if area[i]["TYPE"]=="ROOT":# If this bus is the root bus
+        if area[i]["TYPE"] == "ROOT":  # If this bus is the root bus
             Pij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
                                     name="Pij_x{0}".format(i))
             Qij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
@@ -102,24 +104,23 @@ def run(mpc):
             Iij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
                                     name="Iij_x{0}".format(i))
             Vi_x[i] = model.addVar(lb=area[i]["VMIN"], ub=area[i]["VMAX"], vtype=GRB.CONTINUOUS,
-                                    name="Vi_x{0}".format(i))
-            Pi_x[i] = model.addVar(lb=area[i]["PGMIN"]-area[i]["PD"], ub=area[i]["PGMAX"]-area[i]["PD"], vtype=GRB.CONTINUOUS,
+                                   name="Vi_x{0}".format(i))
+            Pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
+                                   vtype=GRB.CONTINUOUS,
                                    name="Pi_x{0}".format(i))
             Qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["PD"],
                                    vtype=GRB.CONTINUOUS,
                                    name="Qi_x{0}".format(i))
-            Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"],vtype=GRB.CONTINUOUS,name="Pi_x{0}".format(i))
-            Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"],vtype=GRB.CONTINUOUS,name="Qi_x{0}".format(i))
-            Pij_y[i] = model.addVar( vtype=GRB.CONTINUOUS,name="Pij_y{0}".format(i))
-            Qij_y[i] = model.addVar( vtype=GRB.CONTINUOUS,name="Qij_y{0}".format(i))
-            Iij_y[i] = model.addVar( vtype=GRB.CONTINUOUS,name="Iij_y{0}".format(i))
-            Vi_y[i] = model.addVar( vtype=GRB.CONTINUOUS,name="Vi_y{0}".format(i))
-            Pi_y[i] = model.addVar(vtype=GRB.CONTINUOUS,name="Pi_y{0}".format(i))
-            Qi_y[i] = model.addVar(vtype=GRB.CONTINUOUS,name="Qi_y{0}".format(i))
-
-
-
-
+            Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS,
+                                 name="Pi_x{0}".format(i))
+            Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS,
+                                 name="Qi_x{0}".format(i))
+            Pij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(i))
+            Qij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(i))
+            Iij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(i))
+            Vi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vi_y{0}".format(i))
+            Pi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pi_y{0}".format(i))
+            Qi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qi_y{0}".format(i))
 
     model.setObjective(obj)
     model.Params.OutputFlag = 0
@@ -152,8 +153,6 @@ def run(mpc):
 
     obj = obj.getValue()
 
-
-
     primal_residual = []
 
     for i in range(nl):
@@ -179,13 +178,13 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
     :param bus: Bus information
     :return: Area, ancestor bus, children buses, line among buses, load, generations and line information
     """
-    Area = [ ]
+    Area = []
     for i in index:
         temp = {}
         temp["Index"] = i
         if i in branch_t:
             AncestorBus = branch_f[where(branch_t == i)]
-            temp["Ai"] = int(AncestorBus[0]) # For each bus, there exits only one ancestor bus, as one connected tree
+            temp["Ai"] = int(AncestorBus[0])  # For each bus, there exits only one ancestor bus, as one connected tree
             AncestorBranch = where(branch_t == i)
             temp["Abranch"] = int(AncestorBranch[0])
             temp["BR_R"] = Branch_R[temp["Abranch"]]
@@ -196,8 +195,8 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
             else:
                 temp["TYPE"] = "LEAF"
         else:
-            temp["Ai"] = [ ]
-            temp["Abranch"] = [ ]
+            temp["Ai"] = []
+            temp["Abranch"] = []
             temp["BR_R"] = 0
             temp["BR_X"] = 0
             temp["SMAX"] = 0
@@ -206,17 +205,17 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
         if i in branch_f:
             ChildrenBranch = where(branch_f == i)
             nChildren = len(ChildrenBranch[0])
-            temp["Ci"] = [ ]
-            temp["Cbranch"] = [ ]
+            temp["Ci"] = []
+            temp["Cbranch"] = []
             for i in range(nChildren):
                 temp["Cbranch"].append(int(ChildrenBranch[0][i]))
-                temp["Ci"].append(int(branch_t[temp["Cbranch"][i]]))# The children bus
+                temp["Ci"].append(int(branch_t[temp["Cbranch"][i]]))  # The children bus
         else:
             temp["Cbranch"] = []
             temp["Ci"] = []
 
         # Update the node information
-        if i in gen[:,GEN_BUS]:
+        if i in gen[:, GEN_BUS]:
             temp["PGMAX"] = gen[where(gen[:, GEN_BUS] == i), PMAX][0][0]
             temp["PGMIN"] = gen[where(gen[:, GEN_BUS] == i), PMIN][0][0]
             temp["QGMAX"] = gen[where(gen[:, GEN_BUS] == i), QMAX][0][0]
@@ -234,8 +233,8 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
             temp["c"] = 0
         temp["PD"] = bus[i, PD]
         temp["QD"] = bus[i, QD]
-        temp["VMIN"] = bus[i, VMIN]**2
-        temp["VMAX"] = bus[i, VMAX]**2
+        temp["VMIN"] = bus[i, VMIN] ** 2
+        temp["VMAX"] = bus[i, VMAX] ** 2
 
         Area.append(temp)
 
