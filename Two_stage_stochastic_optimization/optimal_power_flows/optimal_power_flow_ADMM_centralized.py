@@ -64,20 +64,29 @@ def run(mpc):
     # Formulate the centralized optimization problem according to the information provided by area
     model = Model("OPF")
     # Define the decision variables, compact set
+    # X variables
     Pij_x = {}
     Qij_x = {}
     Iij_x = {}
     Vi_x = {}
-    Pi_x = {}
-    Qi_x = {}
+    pi_x = {}
+    qi_x = {}
     Pg = {}
     Qg = {}
+    # Y variables
+    # Part 1), self observation
+    Pii_y = {}
+    Qii_y = {}
+    Iii_y = {}
+    Vii_y = {}
+    pii_y = {}
+    qii_y = {}
+    # Part 2), to the ancestor
     Pij_y = {}
     Qij_y = {}
     Iij_y = {}
-    Vi_y = {}
-    Pi_y = {}
-    Qi_y = {}
+    # Part 3), to the children
+    Vij_y = {}
     obj = 0
     for i in range(nb):  # The iteration from each bus
         Pij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
