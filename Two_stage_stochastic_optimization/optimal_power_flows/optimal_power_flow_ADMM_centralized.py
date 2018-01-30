@@ -57,11 +57,11 @@ def run(mpc):
     gencost[:, 5] = gencost[:, 5] * baseMVA
     bus[:, PD] = bus[:, PD] / baseMVA
     bus[:, QD] = bus[:, QD] / baseMVA
-    area = ancestor_children_generation(f, t, range(nb), Branch_R, Branch_X, Slmax, gen, bus, gencost)
+    area = ancestor_children_generation(f, t, range(nb), Branch_R, Branch_X, Slmax, gen, bus, gencost, baseMVA)
     nci = []
     for i in range(nb):
         nci.append(len(area[i]["Ci"]))
-
+    M = 100000
     # Formulate the centralized optimization problem according to the information provided by area
     model = Model("OPF")
 
@@ -102,36 +102,35 @@ def run(mpc):
                                name="Ii_x{0}".format(i))
         Vi_x[i] = model.addVar(lb=area[i]["VMIN"], ub=area[i]["VMAX"], vtype=GRB.CONTINUOUS,
                                name="Vi_x{0}".format(i))
+
         pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
-                               vtype=GRB.CONTINUOUS,
-                               name="Pi_x{0}".format(i))
+                               vtype=GRB.CONTINUOUS, name="pi_x{0}".format(i))
         qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["QD"],
-                               vtype=GRB.CONTINUOUS,
-                               name="Qi_x{0}".format(i))
+                               vtype=GRB.CONTINUOUS, name="qi_x{0}".format(i))
 
-        Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pi_x{0}".format(i))
-        Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qi_x{0}".format(i))
+        Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pgi{0}".format(i))
+        Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qgi{0}".format(i))
 
-        Pii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pii_y{0}".format(i))
-        Qii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qii_y{0}".format(i))
-        Iii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iii_y{0}".format(i))
-        Vii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vii_y{0}".format(i))
-        pii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="pii_y{0}".format(i))
-        qii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="qii_y{0}".format(i))
+        Pii_y[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Pii_y{0}".format(i))
+        Qii_y[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Qii_y{0}".format(i))
+        Iii_y[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Iii_y{0}".format(i))
+        Vii_y[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Vii_y{0}".format(i))
+        pii_y[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="pii_y{0}".format(i))
+        qii_y[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="qii_y{0}".format(i))
         # For each branch, the following observation variables should be introduced
         # According to the sequence of lines
 
         if area[i]["TYPE"] != "ROOT":  # If this bus is the root bus
-            Pij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(j))
-            Qij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(j))
-            Iij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(j))
-            Vij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Vij_y{0}".format(j))
+            Pij_y[j] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(j))
+            Qij_y[j] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(j))
+            Iij_y[j] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(j))
+            Vij_y[j] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="Vij_y{0}".format(j))
             j += 1
 
     for i in range(nb):
         # Add constrain for each bus
-        model.addConstr(pi_x[i] == Pg[i] - area[i]["PD"])
-        model.addConstr(qi_x[i] == Qg[i] - area[i]["QD"])
+        model.addConstr(Pg[i] - pi_x[i] == area[i]["PD"])
+        model.addConstr(Qg[i] - qi_x[i] == area[i]["QD"])
         model.addConstr(Pi_x[i] * Pi_x[i] + Qi_x[i] * Qi_x[i] <= Ii_x[i] * Vi_x[i])
 
         # Update the objective function
@@ -150,12 +149,13 @@ def run(mpc):
             for j in range(len(area[i]["Ci"])):
                 expr += Qij_y[area[i]["Cbranch"][j]] - Iij_y[area[i]["Cbranch"][j]] * Branch_X[area[i]["Cbranch"][j]]
             model.addConstr(qii_y[i] + expr == 0)
+
         elif area[i]["TYPE"] == "LEAF":  # Only KCL equation is required
             model.addConstr(pii_y[i] - Pii_y[i] == 0)
             model.addConstr(qii_y[i] - Qii_y[i] == 0)
             model.addConstr(
-                Vij_y[area[i]["Abranch"]] - Vii_y[i] + 2 * Branch_R[area[i]["Abranch"]] * Pii_y[i] + 2 * Branch_X[
-                    area[i]["Abranch"]] * Qii_y[i] - Iii_y[i] * (Branch_R[area[i]["Abranch"]] ** 2 + Branch_X[area[i]["Abranch"]] ** 2) == 0)
+                Vij_y[area[i]["Abranch"]] - Vii_y[i] + 2 * area[i]["BR_R"] * Pii_y[i] + 2 * area[i]["BR_X"] * Qii_y[i] -
+                Iii_y[i] * (area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
         else:
             expr = 0
             for j in range(len(area[i]["Ci"])):
@@ -166,56 +166,58 @@ def run(mpc):
             for j in range(len(area[i]["Ci"])):
                 expr += Qij_y[area[i]["Cbranch"][j]] - Iij_y[area[i]["Cbranch"][j]] * Branch_X[area[i]["Cbranch"][j]]
             model.addConstr(qii_y[i] - Qii_y[i] + expr == 0)
-
             model.addConstr(
-                Vij_y[area[i]["Abranch"]] - Vii_y[i] + 2 * Branch_R[area[i]["Abranch"]] * Pii_y[i] + 2 * Branch_X[
-                    area[i]["Abranch"]] * Qii_y[i] - Iii_y[i] * (
-                        Branch_R[area[i]["Abranch"]] ** 2 + Branch_X[area[i]["Abranch"]] ** 2) == 0)
+                Vij_y[area[i]["Abranch"]] - Vii_y[i] + 2 * area[i]["BR_R"] * Pii_y[i] + 2 * area[i]["BR_X"] * Qii_y[i] -
+                Iii_y[i] * (area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
 
         # Formulate consensus constraints
 
         # Add constraints
         model.addConstr(Pii_y[i] == Pi_x[i])
-        model.addConstr(Pii_y[i] == Pi_x[i])
-        model.addConstr(Pii_y[i] == Pi_x[i])
-        model.addConstr(Pii_y[i] == Pi_x[i])
-        model.addConstr(Pii_y[i] == Pi_x[i])
+        model.addConstr(Qii_y[i] == Qi_x[i])
+        model.addConstr(Vii_y[i] == Vi_x[i])
+        model.addConstr(Iii_y[i] == Ii_x[i])
+        model.addConstr(pii_y[i] == pi_x[i])
+        model.addConstr(qii_y[i] == qi_x[i])
+        # For each branch
+    for i in range(nl):
+        model.addConstr(Vij_y[i] == Vi_x[f[i]])
+        model.addConstr(Pij_y[i] == Pi_x[t[i]])
+        model.addConstr(Qij_y[i] == Qi_x[t[i]])
+        model.addConstr(Iij_y[i] == Ii_x[t[i]])
 
     model.setObjective(obj)
-    model.Params.OutputFlag = 0
-    model.Params.LogToConsole = 0
+    model.Params.OutputFlag = 1
+    model.Params.LogToConsole = 1
     model.Params.DisplayInterval = 1
+
     model.optimize()
 
-    Pij = []
-    Qij = []
-    Iij = []
-    Vi = []
-    Pg = []
-    Qg = []
     Pi = []
     Qi = []
-
-    for i in range(nl):
-        Pij.append(model.getVarByName("Pij{0}".format(i)).X)
-        Qij.append(model.getVarByName("Qij{0}".format(i)).X)
-        Iij.append(model.getVarByName("Iij{0}".format(i)).X)
+    Ii = []
+    Vi = []
+    pi = []
+    qi = []
+    pg = []
+    qg = []
 
     for i in range(nb):
-        Vi.append(model.getVarByName("V{0}".format(i)).X)
-        Pi.append(model.getVarByName("Pi{0}".format(i)).X)
-        Qi.append(model.getVarByName("Qi{0}".format(i)).X)
-
-    for i in range(ng):
-        Pg.append(model.getVarByName("Pg{0}".format(i)).X)
-        Qg.append(model.getVarByName("Qg{0}".format(i)).X)
+        Pi.append(model.getVarByName("Pi_x{0}".format(i)).X)
+        Qi.append(model.getVarByName("Pi_x{0}".format(i)).X)
+        Ii.append(model.getVarByName("Ii_x{0}".format(i)).X)
+        Vi.append(model.getVarByName("Vi_x{0}".format(i)).X)
+        pi.append(model.getVarByName("pi_x{0}".format(i)).X)
+        qi.append(model.getVarByName("qi_x{0}".format(i)).X)
+        pg.append(model.getVarByName("Pgi{0}".format(i)).X)
+        qg.append(model.getVarByName("Qgi{0}".format(i)).X)
 
     obj = obj.getValue()
 
     primal_residual = []
 
-    for i in range(nl):
-        primal_residual.append(Pij[i] * Pij[i] + Qij[i] * Qij[i] - Iij[i] * Vi[int(t[i])])
+    for i in range(nb):
+        primal_residual.append(Pi[i] * Pi[i] + Qi[i] * Qi[i] - Ii[i] * Vi[i])
 
     return obj, primal_residual
 
@@ -224,7 +226,7 @@ def turn_to_power(list, power=1):
     return [number ** power for number in list]
 
 
-def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, SMAX, gen, bus, gencost):
+def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, SMAX, gen, bus, gencost, baseMVA):
     """
     Ancestor and children information for each node, together with information within each area
     :param branch_f:
@@ -275,16 +277,20 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
 
         # Update the node information
         if i in gen[:, GEN_BUS]:
-            temp["PGMAX"] = gen[where(gen[:, GEN_BUS] == i), PMAX][0][0]
-            temp["PGMIN"] = gen[where(gen[:, GEN_BUS] == i), PMIN][0][0]
-            temp["QGMAX"] = gen[where(gen[:, GEN_BUS] == i), QMAX][0][0]
-            temp["QGMIN"] = gen[where(gen[:, GEN_BUS] == i), QMIN][0][0]
-            if temp["QGMIN"]>temp["QGMAX"]:
+            temp["PGMAX"] = gen[where(gen[:, GEN_BUS] == i), PMAX][0][0]/baseMVA
+            temp["PGMIN"] = gen[where(gen[:, GEN_BUS] == i), PMIN][0][0]/baseMVA
+            temp["QGMAX"] = gen[where(gen[:, GEN_BUS] == i), QMAX][0][0]/baseMVA
+            temp["QGMIN"] = gen[where(gen[:, GEN_BUS] == i), QMIN][0][0]/baseMVA
+            if temp["PGMIN"] > temp["PGMAX"]:
+                t = temp["PGMIN"]
+                temp["PGMIN"] = temp["PGMAX"]
+                temp["PGMAX"] = t
+            if temp["QGMIN"] > temp["QGMAX"]:
                 t = temp["QGMIN"]
                 temp["QGMIN"] = temp["QGMAX"]
                 temp["QGMAX"] = t
-            temp["a"] = gencost[where(gen[:, GEN_BUS] == i), 4][0][0]
-            temp["b"] = gencost[where(gen[:, GEN_BUS] == i), 5][0][0]
+            temp["a"] = gencost[where(gen[:, GEN_BUS] == i), 4][0][0] * baseMVA ** 2
+            temp["b"] = gencost[where(gen[:, GEN_BUS] == i), 5][0][0] * baseMVA
             temp["c"] = gencost[where(gen[:, GEN_BUS] == i), 6][0][0]
         else:
             temp["PGMAX"] = 0
@@ -294,8 +300,8 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
             temp["a"] = 0
             temp["b"] = 0
             temp["c"] = 0
-        temp["PD"] = bus[i, PD]
-        temp["QD"] = bus[i, QD]
+        temp["PD"] = bus[i, PD]/baseMVA
+        temp["QD"] = bus[i, QD]/baseMVA
         temp["VMIN"] = bus[i, VMIN] ** 2
         temp["VMAX"] = bus[i, VMAX] ** 2
 
