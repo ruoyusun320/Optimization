@@ -9,7 +9,8 @@ References:
 # xi=[Pi,Qi,li,vi,pi,qi,pgi,pdi]
 # yij=[Pi,Qi,li,vi,pi,qi,vCi,PiAi,QiAi,liAi]
 # for each y, its size might be changed
-# In total, the size of y equals to 5*nb+3*nl+nl
+# In total, the size of y equals to 5*nb+3*nl(current and power)+nl(ancestor bus voltage)
+
 """
 
 from Two_stage_stochastic_optimization.power_flow_modelling import case33
@@ -91,6 +92,7 @@ def run(mpc):
     Vij_y = {}  # For the given branch
 
     obj = 0
+    j = 0
     for i in range(nb):  # The iteration from each bus
         Pi_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
                                name="Pi_x{0}".format(i))
@@ -103,7 +105,7 @@ def run(mpc):
         pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
                                vtype=GRB.CONTINUOUS,
                                name="Pi_x{0}".format(i))
-        qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["PD"],
+        qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["QD"],
                                vtype=GRB.CONTINUOUS,
                                name="Qi_x{0}".format(i))
 
@@ -118,20 +120,57 @@ def run(mpc):
         qii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="qii_y{0}".format(i))
         # For each branch, the following observation variables should be introduced
         # According to the sequence of lines
-        if area[i]["TYPE"] != "ROOT":  # If this bus is the root bus
-            Pij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_x{0}".format(i))
-            Qij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_x{0}".format(i))
-            Iij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_x{0}".format(i))
-            Vij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vij_x{0}".format(i))
 
+        if area[i]["TYPE"] != "ROOT":  # If this bus is the root bus
+            Pij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(j))
+            Qij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(j))
+            Iij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(j))
+            Vij_y[j] = model.addVar(vtype=GRB.CONTINUOUS, name="Vij_y{0}".format(j))
+            j += 1
+
+    for i in range(nb):
         # Add constrain for each bus
         model.addConstr(pi_x[i] == Pg[i] - area[i]["PD"])
         model.addConstr(qi_x[i] == Qg[i] - area[i]["QD"])
-        model.addConstr(Pi_x[i] ** 2 + Qi_x[i] ** 2 <= Ii_x[i] * Vi_x[i])
+        model.addConstr(Pi_x[i] * Pi_x[i] + Qi_x[i] * Qi_x[i] <= Ii_x[i] * Vi_x[i])
 
         # Update the objective function
-        obj += area[i]["a"] * Pg[i] ** 2 + area[i]["b"] * Pg[i] + area[i]["c"]
+        obj += area[i]["a"] * Pg[i] * Pg[i] + area[i]["b"] * Pg[i] + area[i]["c"]
         # Add constrain for the observation of each bus
+        # 1)Constrain for KCL equations
+        # 2)Constrain for KVL equations
+        if area[i]["TYPE"] == "ROOT":
+            # Only KCL equation is required
+            expr = 0
+            for j in range(len(area[i]["Ci"])):
+                expr += Pij_y[area[i]["Cbranch"][j]] - Iij_y[area[i]["Cbranch"][j]] * Branch_R[area[i]["Cbranch"][j]]
+            model.addConstr(pii_y[i] + expr == 0)
+
+            expr = 0
+            for j in range(len(area[i]["Ci"])):
+                expr += Qij_y[area[i]["Cbranch"][j]] - Iij_y[area[i]["Cbranch"][j]] * Branch_X[area[i]["Cbranch"][j]]
+            model.addConstr(qii_y[i] + expr == 0)
+        elif area[i]["TYPE"] == "LEAF":  # Only KCL equation is required
+            model.addConstr(pii_y[i] - Pii_y[i] == 0)
+            model.addConstr(qii_y[i] - Qii_y[i] == 0)
+            model.addConstr(
+                Vij_y[area[i]["Abranch"]] - Vii_y[i] + 2 * Branch_R[area[i]["Abranch"]] * Pii_y[i] + 2 * Branch_X[
+                    area[i]["Abranch"]] * Qii_y[i] - Iii_y[i] * (Branch_R[area[i]["Abranch"]] ** 2 + Branch_X[area[i]["Abranch"]] ** 2) == 0)
+        else:
+            expr = 0
+            for j in range(len(area[i]["Ci"])):
+                expr += Pij_y[area[i]["Cbranch"][j]] - Iij_y[area[i]["Cbranch"][j]] * Branch_R[area[i]["Cbranch"][j]]
+            model.addConstr(pii_y[i] - Pii_y[i] + expr == 0)
+
+            expr = 0
+            for j in range(len(area[i]["Ci"])):
+                expr += Qij_y[area[i]["Cbranch"][j]] - Iij_y[area[i]["Cbranch"][j]] * Branch_X[area[i]["Cbranch"][j]]
+            model.addConstr(qii_y[i] - Qii_y[i] + expr == 0)
+
+            model.addConstr(
+                Vij_y[area[i]["Abranch"]] - Vii_y[i] + 2 * Branch_R[area[i]["Abranch"]] * Pii_y[i] + 2 * Branch_X[
+                    area[i]["Abranch"]] * Qii_y[i] - Iii_y[i] * (
+                        Branch_R[area[i]["Abranch"]] ** 2 + Branch_X[area[i]["Abranch"]] ** 2) == 0)
 
         # Formulate consensus constraints
 
@@ -240,6 +279,10 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
             temp["PGMIN"] = gen[where(gen[:, GEN_BUS] == i), PMIN][0][0]
             temp["QGMAX"] = gen[where(gen[:, GEN_BUS] == i), QMAX][0][0]
             temp["QGMIN"] = gen[where(gen[:, GEN_BUS] == i), QMIN][0][0]
+            if temp["QGMIN"]>temp["QGMAX"]:
+                t = temp["QGMIN"]
+                temp["QGMIN"] = temp["QGMAX"]
+                temp["QGMAX"] = t
             temp["a"] = gencost[where(gen[:, GEN_BUS] == i), 4][0][0]
             temp["b"] = gencost[where(gen[:, GEN_BUS] == i), 5][0][0]
             temp["c"] = gencost[where(gen[:, GEN_BUS] == i), 6][0][0]
