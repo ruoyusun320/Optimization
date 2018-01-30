@@ -57,22 +57,24 @@ def run(mpc):
     bus[:, PD] = bus[:, PD] / baseMVA
     bus[:, QD] = bus[:, QD] / baseMVA
     area = ancestor_children_generation(f, t, range(nb), Branch_R, Branch_X, Slmax, gen, bus, gencost)
-    nci= []
+    nci = []
     for i in range(nb):
         nci.append(len(area[i]["Ci"]))
 
     # Formulate the centralized optimization problem according to the information provided by area
     model = Model("OPF")
+
     # Define the decision variables, compact set
     # X variables
-    Pij_x = {}
-    Qij_x = {}
-    Iij_x = {}
+    Pi_x = {}
+    Qi_x = {}
+    Ii_x = {}
     Vi_x = {}
     pi_x = {}
     qi_x = {}
     Pg = {}
     Qg = {}
+
     # Y variables
     # Part 1), self observation
     Pii_y = {}
@@ -85,59 +87,60 @@ def run(mpc):
     Pij_y = {}
     Qij_y = {}
     Iij_y = {}
-    # Part 3), to the children
-    Vij_y = {}
+    # Part 3), to the children. The definition is in accordance with the sequence of lines
+    Vij_y = {}  # For the given branch
+
     obj = 0
     for i in range(nb):  # The iteration from each bus
-        Pij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
-                                name="Pij_x{0}".format(i))
-        Qij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
-                                name="Qij_x{0}".format(i))
-        Iij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
-                                name="Iij_x{0}".format(i))
+        Pi_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
+                               name="Pi_x{0}".format(i))
+        Qi_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
+                               name="Qi_x{0}".format(i))
+        Ii_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
+                               name="Ii_x{0}".format(i))
         Vi_x[i] = model.addVar(lb=area[i]["VMIN"], ub=area[i]["VMAX"], vtype=GRB.CONTINUOUS,
                                name="Vi_x{0}".format(i))
-        Pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
+        pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
                                vtype=GRB.CONTINUOUS,
                                name="Pi_x{0}".format(i))
-        Qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["PD"],
+        qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["PD"],
                                vtype=GRB.CONTINUOUS,
                                name="Qi_x{0}".format(i))
+
         Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pi_x{0}".format(i))
         Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qi_x{0}".format(i))
 
-        Pij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(i))
-        Qij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(i))
-        Iij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(i))
-        Vi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vi_y{0}".format(i))
-        Pi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pi_y{0}".format(i))
-        Qi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qi_y{0}".format(i))
+        Pii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pii_y{0}".format(i))
+        Qii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qii_y{0}".format(i))
+        Iii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iii_y{0}".format(i))
+        Vii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vii_y{0}".format(i))
+        pii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="pii_y{0}".format(i))
+        qii_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="qii_y{0}".format(i))
+        # For each branch, the following observation variables should be introduced
+        # According to the sequence of lines
+        if area[i]["TYPE"] != "ROOT":  # If this bus is the root bus
+            Pij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_x{0}".format(i))
+            Qij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_x{0}".format(i))
+            Iij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_x{0}".format(i))
+            Vij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vij_x{0}".format(i))
 
-        if area[i]["TYPE"] == "ROOT":  # If this bus is the root bus
-            Pij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
-                                    name="Pij_x{0}".format(i))
-            Qij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
-                                    name="Qij_x{0}".format(i))
-            Iij_x[i] = model.addVar(lb=-area[i]["SMAX"], ub=area[i]["SMAX"], vtype=GRB.CONTINUOUS,
-                                    name="Iij_x{0}".format(i))
-            Vi_x[i] = model.addVar(lb=area[i]["VMIN"], ub=area[i]["VMAX"], vtype=GRB.CONTINUOUS,
-                                   name="Vi_x{0}".format(i))
-            Pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
-                                   vtype=GRB.CONTINUOUS,
-                                   name="Pi_x{0}".format(i))
-            Qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["PD"],
-                                   vtype=GRB.CONTINUOUS,
-                                   name="Qi_x{0}".format(i))
-            Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS,
-                                 name="Pi_x{0}".format(i))
-            Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS,
-                                 name="Qi_x{0}".format(i))
-            Pij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(i))
-            Qij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(i))
-            Iij_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(i))
-            Vi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Vi_y{0}".format(i))
-            Pi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Pi_y{0}".format(i))
-            Qi_y[i] = model.addVar(vtype=GRB.CONTINUOUS, name="Qi_y{0}".format(i))
+        # Add constrain for each bus
+        model.addConstr(pi_x[i] == Pg[i] - area[i]["PD"])
+        model.addConstr(qi_x[i] == Qg[i] - area[i]["QD"])
+        model.addConstr(Pi_x[i] ** 2 + Qi_x[i] ** 2 <= Ii_x[i] * Vi_x[i])
+
+        # Update the objective function
+        obj += area[i]["a"] * Pg[i] ** 2 + area[i]["b"] * Pg[i] + area[i]["c"]
+        # Add constrain for the observation of each bus
+
+        # Formulate consensus constraints
+
+        # Add constraints
+        model.addConstr(Pii_y[i] == Pi_x[i])
+        model.addConstr(Pii_y[i] == Pi_x[i])
+        model.addConstr(Pii_y[i] == Pi_x[i])
+        model.addConstr(Pii_y[i] == Pi_x[i])
+        model.addConstr(Pii_y[i] == Pi_x[i])
 
     model.setObjective(obj)
     model.Params.OutputFlag = 0
