@@ -19,6 +19,7 @@ from pypower.idx_bus import BUS_TYPE, REF, VA, VM, PD, GS, VMAX, VMIN, BUS_I, QD
 from pypower.idx_gen import GEN_BUS, VG, PG, QG, PMAX, PMIN, QMAX, QMIN
 from pypower.ext2int import ext2int
 
+
 def run(mpc):
     """
     Gurobi based optimal power flow modelling and solution
@@ -33,13 +34,8 @@ def run(mpc):
     ng = shape(mpc['gen'])[0]  # number of dispatchable injections
     f = branch[:, F_BUS]  ## list of "from" buses
     t = branch[:, T_BUS]  ## list of "to" buses
-    i = range(nl)  ## double set of row indices
-    # Connection matrix
-    Cf = sparse((ones(nl), (i, f)), (nl, nb))
-    Ct = sparse((ones(nl), (i, t)), (nl, nb))
-    Cg = sparse((ones(ng), (gen[:, GEN_BUS], range(ng))), (nb, ng))
-    # Connection matrix
-    Cg = sparse((ones(ng), (gen[:, GEN_BUS], range(ng))), (nb, ng))
+
+    # Modify the bus information
     Branch_R = branch[:, BR_R]
     Branch_X = branch[:, BR_X]
     Slmax = branch[:, RATE_A] / baseMVA
@@ -51,9 +47,9 @@ def run(mpc):
     gencost[:, 5] = gencost[:, 5] * baseMVA
     bus[:, PD] = bus[:, PD] / baseMVA
     bus[:, QD] = bus[:, QD] / baseMVA
+
     area = ancestor_children_generation(f, t, nb, Branch_R, Branch_X, Slmax, gen, bus, gencost, baseMVA)
     M = inf
-
 
 
 def turn_to_power(list, power=1):
@@ -143,7 +139,8 @@ def ancestor_children_generation(branch_f, branch_t, nb, Branch_R, Branch_X, SMA
 
     return Area
 
-def sub_problem( Index, Area, ru):
+
+def sub_problem(Index, Area, ru):
     """
     Sub-problem optimization for each area, where the area is defined one bus and together with the
     :param Index: Target area
@@ -155,7 +152,7 @@ def sub_problem( Index, Area, ru):
     modelX = Model("sub_opf_x")  # Sub-optimal power flow x update
     modelY = Model("sub_opf_y")  # Sub-optimal power flow y update
 
-    if Area[Index]["Type"] == "ROOT":# Only needs to meet the KCL equation
+    if Area[Index]["Type"] == "ROOT":  # Only needs to meet the KCL equation
         # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x]
         # zi= [pi_z,qi_z,Vi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
         # The following types of constraints should be considered
@@ -175,44 +172,48 @@ def sub_problem( Index, Area, ru):
 
         # Step 1: construct the x update problem
         nChildren = len(Area[Index]["Ci"])
-        V_Ci_z = [ ]
-        Pi_Ci_x = [ ]
-        Qi_Ci_x = [ ]
-        li_Ci_x = [ ]
-        mu_Pi_Ci_x = [ ]
-        mu_Qi_Ci_x = [ ]
-        mu_li_Ci_x = [ ]
+        V_Ci_z = []
+        Pi_Ci_x = []
+        Qi_Ci_x = []
+        li_Ci_x = []
+        mu_Pi_Ci_x = []
+        mu_Qi_Ci_x = []
+        mu_li_Ci_x = []
         Line_R = []
         Line_X = []
-        for i in range(nChildren):# Information exchange
-            V_Ci_z.append(Area[Area[Index]["Ci"][i]]["V_Ai_z"])# Voltage magnitude stored in children set
+        for i in range(nChildren):  # Information exchange
+            V_Ci_z.append(Area[Area[Index]["Ci"][i]]["V_Ai_z"])  # Voltage magnitude stored in children set
 
-            Pi_Ci_x = Pi_Ci_x.append(Area[Area[Index]["Ci"][i]]["Pi_x"]) # Active power from i to Ai stored in children set
-            Qi_Ci_x = Qi_Ci_x.append(Area[Area[Index]["Ci"][i]]["Qi_x"])  # Reactive power from i to Ai stored in children set
+            Pi_Ci_x = Pi_Ci_x.append(
+                Area[Area[Index]["Ci"][i]]["Pi_x"])  # Active power from i to Ai stored in children set
+            Qi_Ci_x = Qi_Ci_x.append(
+                Area[Area[Index]["Ci"][i]]["Qi_x"])  # Reactive power from i to Ai stored in children set
             li_Ci_x = li_Ci_x.append(Area[Area[Index]["Ci"][i]]["li_x"])  # Current from i to Ai stored in children set
-            mu_Pi_Ci_x = mu_Pi_Ci_x.append(Area[Area[Index]["Ci"][i]]["mu_Pi_x"])  # Multiplier of active power from i to Ai stored in children set
-            mu_Qi_Ci_x = mu_Qi_Ci_x.append(Area[Area[Index]["Ci"][i]]["mu_Qi_x"])  # Multiplier of reactive power from i to Ai stored in children set
-            mu_li_Ci_x = mu_li_Ci_x.append(Area[Area[Index]["Ci"][i]]["mu_li_x"])  # Multiplier of current from i to Ai stored in children set
-            Line_R = Line_R.append(Area[Area[Index]["Ci"][i]]["Line_R"]) # Line resistance of the children area
-            Line_X = Line_X.append(Area[Area[Index]["Ci"][i]]["Line_X"]) # Line reactance of the children area
+            mu_Pi_Ci_x = mu_Pi_Ci_x.append(
+                Area[Area[Index]["Ci"][i]]["mu_Pi_x"])  # Multiplier of active power from i to Ai stored in children set
+            mu_Qi_Ci_x = mu_Qi_Ci_x.append(Area[Area[Index]["Ci"][i]][
+                                               "mu_Qi_x"])  # Multiplier of reactive power from i to Ai stored in children set
+            mu_li_Ci_x = mu_li_Ci_x.append(
+                Area[Area[Index]["Ci"][i]]["mu_li_x"])  # Multiplier of current from i to Ai stored in children set
+            Line_R = Line_R.append(Area[Area[Index]["Ci"][i]]["Line_R"])  # Line resistance of the children area
+            Line_X = Line_X.append(Area[Area[Index]["Ci"][i]]["Line_X"])  # Line reactance of the children area
 
-
-        if len(Area["Gen"])!=0:
-            pi_x = modelX.addVar(lb = Area[Index]["PMIN"] - Area[Index]["PD"], ub = Area[Index]["PMAX"] - Area[Index]["PD"],
-                                 vtype = GRB.CONTINUOUS, name="pi")
-            qi_x = modelX.addVar(lb = Area[Index]["QMIN"] - Area[Index]["QD"], ub = Area[Index]["QMAX"] - Area[Index]["QD"],
-                                 vtype = GRB.CONTINUOUS, name="qi")
-            Pg = modelX.addVar(lb = Area[Index]["PMIN"], ub = Area[Index]["PMAX"], vtype = GRB.CONTINUOUS, name="Pg")
-            Qg = modelX.addVar(lb = Area[Index]["QMIN"], ub = Area[Index]["QMAX"], vtype = GRB.CONTINUOUS, name="Qg")
+        if len(Area["Gen"]) != 0:
+            pi_x = modelX.addVar(lb=Area[Index]["PMIN"] - Area[Index]["PD"], ub=Area[Index]["PMAX"] - Area[Index]["PD"],
+                                 vtype=GRB.CONTINUOUS, name="pi")
+            qi_x = modelX.addVar(lb=Area[Index]["QMIN"] - Area[Index]["QD"], ub=Area[Index]["QMAX"] - Area[Index]["QD"],
+                                 vtype=GRB.CONTINUOUS, name="qi")
+            Pg = modelX.addVar(lb=Area[Index]["PMIN"], ub=Area[Index]["PMAX"], vtype=GRB.CONTINUOUS, name="Pg")
+            Qg = modelX.addVar(lb=Area[Index]["QMIN"], ub=Area[Index]["QMAX"], vtype=GRB.CONTINUOUS, name="Qg")
 
             pi_z = modelY.addVar(lb=Area[Index]["PMIN"] - Area[Index]["PD"], ub=Area[Index]["PMAX"] - Area[Index]["PD"],
-                             vtype=GRB.CONTINUOUS, name="pi")
+                                 vtype=GRB.CONTINUOUS, name="pi")
             qi_z = modelY.addVar(lb=Area[Index]["QMIN"] - Area[Index]["QD"], ub=Area[Index]["QMAX"] - Area[Index]["QD"],
-                             vtype=GRB.CONTINUOUS, name="qi")
+                                 vtype=GRB.CONTINUOUS, name="qi")
 
         else:
-            pi_x = modelX.addVar(lb= - Area[Index]["PD"], ub= - Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
-            qi_x = modelX.addVar(lb= - Area[Index]["QD"], ub= - Area[Index]["QD"], vtype=GRB.CONTINUOUS, name="Qi")
+            pi_x = modelX.addVar(lb=- Area[Index]["PD"], ub=- Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
+            qi_x = modelX.addVar(lb=- Area[Index]["QD"], ub=- Area[Index]["QD"], vtype=GRB.CONTINUOUS, name="Qi")
             Pg = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pg")
             Qg = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Qg")
             pi_z = modelY.addVar(lb=- Area[Index]["PD"], ub=- Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
@@ -220,19 +221,18 @@ def sub_problem( Index, Area, ru):
 
         Vi_x = modelX.addVar(lb=Area[Index]["VMIN"], ub=Area[Index]["VMAX"], vtype=GRB.CONTINUOUS, name="Vi")
 
-        Pji_z = modelY.addVar(1,nChildren)
+        Pji_z = modelY.addVar(1, nChildren)
         Qji_z = modelY.addVar(1, nChildren)
         lji_z = modelY.addVar(1, nChildren)
 
         modelX.addConstr(Pg - pi_x == Area[Index]["PD"])
         modelX.addConstr(Qg - qi_x == Area[Index]["QD"])
 
-
         # KCL equations
         # 1) Active power balance equation
         expr = 0
         for i in range(nChildren):
-            expr = expr + Pji_z[i] - lji_z[i]*Line_R[i]
+            expr = expr + Pji_z[i] - lji_z[i] * Line_R[i]
         modelY.addConstr(lhs=expr + pi_z, sense=GRB.EQUAL, rhs=0)
         # 2) Reactive power balance equation
         expr = 0
@@ -242,7 +242,7 @@ def sub_problem( Index, Area, ru):
 
 
 
-    elif Area[Index]["Type"] == "LEAF": # Only needs to meet the KVL equation
+    elif Area[Index]["Type"] == "LEAF":  # Only needs to meet the KVL equation
         # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
         # zi = [qi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z]#
         # The following types of constraints should be considered
@@ -263,7 +263,7 @@ def sub_problem( Index, Area, ru):
 
         Pji_x = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
 
-    else: # Only needs to meet the KVL equation
+    else:  # Only needs to meet the KVL equation
         # xi = [Pgi,Qgi,pi_x,pi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
         # zi = [pi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]#
         # The following types of constraints should be considered
@@ -289,10 +289,7 @@ def sub_problem( Index, Area, ru):
 
         Pji_x = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
 
-
-
     return Area
-
 
 
 if __name__ == "__main__":
