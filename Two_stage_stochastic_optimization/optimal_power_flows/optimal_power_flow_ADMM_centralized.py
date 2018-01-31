@@ -187,7 +187,6 @@ def run(mpc):
     model.Params.OutputFlag = 1
     model.Params.LogToConsole = 1
     model.Params.DisplayInterval = 1
-
     model.optimize()
 
     Pi = []
