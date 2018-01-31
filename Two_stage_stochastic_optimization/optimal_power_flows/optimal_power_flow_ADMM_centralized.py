@@ -10,7 +10,7 @@ References:
 # yij=[Pi,Qi,li,vi,pi,qi,vCi,PiAi,QiAi,liAi]
 # for each y, its size might be changed
 # In total, the size of y equals to 5*nb+3*nl(current and power)+nl(ancestor bus voltage)
-
+# 31 Jan 2018: The concept of observatory
 """
 
 from Two_stage_stochastic_optimization.power_flow_modelling import case33
@@ -102,8 +102,8 @@ def run(mpc):
         Vi_x[i] = model.addVar(lb=area[i]["VMIN"], ub=area[i]["VMAX"], vtype=GRB.CONTINUOUS,
                                name="Vi_x{0}".format(i))
 
-        pi_x[i] = model.addVar(lb=-M, ub=M,vtype=GRB.CONTINUOUS, name="pi_x{0}".format(i))
-        qi_x[i] = model.addVar(lb=-M, ub=M,vtype=GRB.CONTINUOUS, name="qi_x{0}".format(i))
+        pi_x[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="pi_x{0}".format(i))
+        qi_x[i] = model.addVar(lb=-M, ub=M, vtype=GRB.CONTINUOUS, name="qi_x{0}".format(i))
 
         Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pgi{0}".format(i))
         Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qgi{0}".format(i))
@@ -168,8 +168,8 @@ def run(mpc):
                 Iii_y[i] * (area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
 
         # Formulate consensus constraints
-
         # Add constraints
+        # The introduction of Xii is to formulate the closed form of the solution
         model.addConstr(Pii_y[i] == Pi_x[i])
         model.addConstr(Qii_y[i] == Qi_x[i])
         model.addConstr(Vii_y[i] == Vi_x[i])
@@ -177,7 +177,7 @@ def run(mpc):
         model.addConstr(pii_y[i] == pi_x[i])
         model.addConstr(qii_y[i] == qi_x[i])
         # For each branch
-    for i in range(nl):
+    for i in range(nl): # which stands for the observatory for each line; The observator constraints
         model.addConstr(Vij_y[i] == Vi_x[f[i]])
         model.addConstr(Pij_y[i] == Pi_x[t[i]])
         model.addConstr(Qij_y[i] == Qi_x[t[i]])
