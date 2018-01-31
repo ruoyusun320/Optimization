@@ -16,7 +16,7 @@ References:
 from Two_stage_stochastic_optimization.power_flow_modelling import case33
 from pypower import runopf
 from gurobipy import *
-from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate, where
+from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate, where, inf
 from scipy.sparse import csr_matrix as sparse
 from scipy.sparse import hstack, vstack, diags
 # Data format
@@ -53,15 +53,14 @@ def run(mpc):
     Slmax = branch[:, RATE_A] / baseMVA
     gen[:, PMAX] = gen[:, PMAX] / baseMVA
     gen[:, PMIN] = gen[:, PMIN] / baseMVA
-    gencost[:, 4] = gencost[:, 4] * baseMVA
+    gen[:, QMAX] = gen[:, QMAX] / baseMVA
+    gen[:, QMIN] = gen[:, QMIN] / baseMVA
+    gencost[:, 4] = gencost[:, 4] * baseMVA * baseMVA
     gencost[:, 5] = gencost[:, 5] * baseMVA
     bus[:, PD] = bus[:, PD] / baseMVA
     bus[:, QD] = bus[:, QD] / baseMVA
-    area = ancestor_children_generation(f, t, range(nb), Branch_R, Branch_X, Slmax, gen, bus, gencost, baseMVA)
-    nci = []
-    for i in range(nb):
-        nci.append(len(area[i]["Ci"]))
-    M = 100000
+    area = ancestor_children_generation(f, t, nb, Branch_R, Branch_X, Slmax, gen, bus, gencost, baseMVA)
+    M = inf
     # Formulate the centralized optimization problem according to the information provided by area
     model = Model("OPF")
 
@@ -103,10 +102,8 @@ def run(mpc):
         Vi_x[i] = model.addVar(lb=area[i]["VMIN"], ub=area[i]["VMAX"], vtype=GRB.CONTINUOUS,
                                name="Vi_x{0}".format(i))
 
-        pi_x[i] = model.addVar(lb=area[i]["PGMIN"] - area[i]["PD"], ub=area[i]["PGMAX"] - area[i]["PD"],
-                               vtype=GRB.CONTINUOUS, name="pi_x{0}".format(i))
-        qi_x[i] = model.addVar(lb=area[i]["QGMIN"] - area[i]["QD"], ub=area[i]["QGMAX"] - area[i]["QD"],
-                               vtype=GRB.CONTINUOUS, name="qi_x{0}".format(i))
+        pi_x[i] = model.addVar(lb=-M, ub=M,vtype=GRB.CONTINUOUS, name="pi_x{0}".format(i))
+        qi_x[i] = model.addVar(lb=-M, ub=M,vtype=GRB.CONTINUOUS, name="qi_x{0}".format(i))
 
         Pg[i] = model.addVar(lb=area[i]["PGMIN"], ub=area[i]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pgi{0}".format(i))
         Qg[i] = model.addVar(lb=area[i]["QGMIN"], ub=area[i]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qgi{0}".format(i))
@@ -226,7 +223,7 @@ def turn_to_power(list, power=1):
     return [number ** power for number in list]
 
 
-def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, SMAX, gen, bus, gencost, baseMVA):
+def ancestor_children_generation(branch_f, branch_t, nb, Branch_R, Branch_X, SMAX, gen, bus, gencost, baseMVA):
     """
     Ancestor and children information for each node, together with information within each area
     :param branch_f:
@@ -240,7 +237,7 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
     :return: Area, ancestor bus, children buses, line among buses, load, generations and line information
     """
     Area = []
-    for i in index:
+    for i in range(nb):
         temp = {}
         temp["Index"] = i
         if i in branch_t:
@@ -268,19 +265,19 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
             nChildren = len(ChildrenBranch[0])
             temp["Ci"] = []
             temp["Cbranch"] = []
-            for i in range(nChildren):
-                temp["Cbranch"].append(int(ChildrenBranch[0][i]))
-                temp["Ci"].append(int(branch_t[temp["Cbranch"][i]]))  # The children bus
+            for j in range(nChildren):
+                temp["Cbranch"].append(int(ChildrenBranch[0][j]))
+                temp["Ci"].append(int(branch_t[temp["Cbranch"][j]]))  # The children bus
         else:
             temp["Cbranch"] = []
             temp["Ci"] = []
 
         # Update the node information
         if i in gen[:, GEN_BUS]:
-            temp["PGMAX"] = gen[where(gen[:, GEN_BUS] == i), PMAX][0][0]/baseMVA
-            temp["PGMIN"] = gen[where(gen[:, GEN_BUS] == i), PMIN][0][0]/baseMVA
-            temp["QGMAX"] = gen[where(gen[:, GEN_BUS] == i), QMAX][0][0]/baseMVA
-            temp["QGMIN"] = gen[where(gen[:, GEN_BUS] == i), QMIN][0][0]/baseMVA
+            temp["PGMAX"] = gen[where(gen[:, GEN_BUS] == i), PMAX][0][0]
+            temp["PGMIN"] = gen[where(gen[:, GEN_BUS] == i), PMIN][0][0]
+            temp["QGMAX"] = gen[where(gen[:, GEN_BUS] == i), QMAX][0][0]
+            temp["QGMIN"] = gen[where(gen[:, GEN_BUS] == i), QMIN][0][0]
             if temp["PGMIN"] > temp["PGMAX"]:
                 t = temp["PGMIN"]
                 temp["PGMIN"] = temp["PGMAX"]
@@ -289,8 +286,8 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
                 t = temp["QGMIN"]
                 temp["QGMIN"] = temp["QGMAX"]
                 temp["QGMAX"] = t
-            temp["a"] = gencost[where(gen[:, GEN_BUS] == i), 4][0][0] * baseMVA ** 2
-            temp["b"] = gencost[where(gen[:, GEN_BUS] == i), 5][0][0] * baseMVA
+            temp["a"] = gencost[where(gen[:, GEN_BUS] == i), 4][0][0]
+            temp["b"] = gencost[where(gen[:, GEN_BUS] == i), 5][0][0]
             temp["c"] = gencost[where(gen[:, GEN_BUS] == i), 6][0][0]
         else:
             temp["PGMAX"] = 0
@@ -300,8 +297,8 @@ def ancestor_children_generation(branch_f, branch_t, index, Branch_R, Branch_X, 
             temp["a"] = 0
             temp["b"] = 0
             temp["c"] = 0
-        temp["PD"] = bus[i, PD]/baseMVA
-        temp["QD"] = bus[i, QD]/baseMVA
+        temp["PD"] = bus[i, PD]
+        temp["QD"] = bus[i, QD]
         temp["VMIN"] = bus[i, VMIN] ** 2
         temp["VMAX"] = bus[i, VMAX] ** 2
 
@@ -321,3 +318,4 @@ if __name__ == "__main__":
     gap = 100 * (result["f"] - obj) / obj
 
     print(gap)
+    print(residual)
