@@ -177,12 +177,20 @@ def run(mpc):
         model.addConstr(pii_y[i] == pi_x[i])
         model.addConstr(qii_y[i] == qi_x[i])
         # For each branch
-    for i in range(nl): # which stands for the observatory for each line; The observator constraints
-        model.addConstr(Vij_y[i] == Vi_x[f[i]])
-        model.addConstr(Pij_y[i] == Pi_x[t[i]])
-        model.addConstr(Qij_y[i] == Qi_x[t[i]])
-        model.addConstr(Iij_y[i] == Ii_x[t[i]])
-
+    # for i in range(nl): # which stands for the observatory for each line; The observator constraints
+    #     model.addConstr(Vij_y[i] == Vi_x[f[i]])
+    #     model.addConstr(Pij_y[i] == Pi_x[t[i]])
+    #     model.addConstr(Qij_y[i] == Qi_x[t[i]])
+    #     model.addConstr(Iij_y[i] == Ii_x[t[i]])
+    # from the perspective of nodes
+    for i in range(nb):
+        if area[i]["nChildren"] != 0:
+            for j in range(area[i]["nChildren"]):
+                model.addConstr(Vi_x[i] == Vij_y[area[i]["Cbranch"][j]])
+        if area[i]["TYPE"] != "ROOT":
+            model.addConstr(Pi_x[i] == Pij_y[area[i]["Abranch"]])
+            model.addConstr(Qi_x[i] == Qij_y[area[i]["Abranch"]])
+            model.addConstr(Ii_x[i] == Iij_y[area[i]["Abranch"]])
     model.setObjective(obj)
     model.Params.OutputFlag = 1
     model.Params.LogToConsole = 1
@@ -267,9 +275,11 @@ def ancestor_children_generation(branch_f, branch_t, nb, Branch_R, Branch_X, SMA
             for j in range(nChildren):
                 temp["Cbranch"].append(int(ChildrenBranch[0][j]))
                 temp["Ci"].append(int(branch_t[temp["Cbranch"][j]]))  # The children bus
+            temp["nChildren"] = nChildren
         else:
             temp["Cbranch"] = []
             temp["Ci"] = []
+            temp["nChildren"] = 0
 
         # Update the node information
         if i in gen[:, GEN_BUS]:
