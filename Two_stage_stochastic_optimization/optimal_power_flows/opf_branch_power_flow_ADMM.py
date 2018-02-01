@@ -11,7 +11,6 @@ from Two_stage_stochastic_optimization.power_flow_modelling import case33
 from gurobipy import *
 from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate, where, inf
 from scipy.sparse import csr_matrix as sparse
-
 # Data format
 from pypower.idx_brch import F_BUS, T_BUS, BR_R, BR_X, TAP, SHIFT, BR_STATUS, RATE_A
 from pypower.idx_cost import MODEL, NCOST, PW_LINEAR, COST, POLYNOMIAL
@@ -50,6 +49,87 @@ def run(mpc):
 
     area = ancestor_children_generation(f, t, nb, Branch_R, Branch_X, Slmax, gen, bus, gencost, baseMVA)
     M = inf
+    # Initialize algorithm for each sub area
+    # 1) For each area, for self observation
+    # x:=[Pg,Qg,pi,qi,Pi,Qi,Vi,Ii]
+    # y:=[pi,qi,Pi,Qi,Vi,Ii,Pij,Qij,Vij,Iij]
+    f = f.tolist()
+    t = t.tolist()
+    for i in range(nb):
+        area[i]["PG"] = (area[i]["PGMAX"] + area[i]["PGMIN"]) / 2
+        area[i]["QG"] = (area[i]["QGMIN"] + area[i]["QGMAX"]) / 2
+        # Observation of x
+        area[i]["pi"] = area[i]["PG"] - area[i]["PD"]
+        area[i]["qi"] = area[i]["QG"] - area[i]["QD"]
+        area[i]["Pi"] = area[i]["pi"]
+        area[i]["Qi"] = area[i]["qi"]
+        area[i]["Vi"] = (area[i]["VMIN"] + area[i]["VMAX"]) / 2
+        if area[i]["TYPE"] != "ROOT":
+            area[i]["Ii"] = (area[i]["Pi"] ** 2 + area[i]["Qi"] ** 2) / area[i]["Vi"]
+        # The self observation
+        area[i]["pi_y"] = area[i]["pi"]
+        area[i]["qi_y"] = area[i]["qi"]
+        area[i]["Vi_y"] = area[i]["Vi"]
+        if area[i]["TYPE"] != "ROOT":
+            area[i]["Ii_y"] = area[i]["Ii"]
+            area[i]["Pi_y"] = area[i]["Pi"]
+            area[i]["Qi_y"] = area[i]["Qi"]
+        # The multipliers
+        area[i]["mu_pi"] = area[i]["pi"] - area[i]["pi_y"]
+        area[i]["mu_qi"] = area[i]["qi"] - area[i]["qi_y"]
+        area[i]["mu_Vi"] = area[i]["Vi"] - area[i]["Vi_y"]
+        if area[i]["TYPE"] != "ROOT":
+            area[i]["mu_Ii"] = area[i]["Ii"] - area[i]["Ii_y"]
+            area[i]["mu_Pi"] = area[i]["Pi"] - area[i]["Pi_y"]
+            area[i]["mu_Qi"] = area[i]["Qi"] - area[i]["Qi_y"]
+        # Spread the information to the observatory
+
+    observatory = []
+    # Store the voltage of parent bus and children power flow information
+    for i in range(nl):
+        temp = {}
+        temp["Vij_x"] = area[int(f[i])]["Vi"]
+        temp["Pij_x"] = area[int(t[i])]["Pi"]
+        temp["Qij_x"] = area[int(t[i])]["Qi"]
+        temp["Iij_x"] = area[int(t[i])]["Ii"]
+        temp["Vij_y"] = area[int(f[i])]["Vi"]
+        temp["Pij_y"] = area[int(t[i])]["Pi"]
+        temp["Qij_y"] = area[int(t[i])]["Qi"]
+        temp["Iij_y"] = area[int(t[i])]["Ii"]
+        temp["mu_Vij"] = 0
+        temp["mu_Pij"] = 0
+        temp["mu_Qij"] = 0
+        temp["mu_Iij"] = 0
+        observatory.append(temp)
+    # Begin the iteration,
+    Gap = 1000
+    k = 0
+    kmax = 10000
+    ru = 0.01
+    while k <= kmax and Gap < 0.0001:
+
+        for i in range(nb):
+            (area, Observatory) = sub_problem(area, observatory, i, ru)
+
+        # Calculate the gap
+        gap = 0
+        for i in range(nb):
+            gap += abs(area[i]["pi"] - area[i]["pi_y"])
+            gap += abs(area[i]["qi"] - area[i]["qi_y"])
+            gap += abs(area[i]["Vi"] - area[i]["Vi_y"])
+            if area[i]["TYPE"] != "ROOT":
+                gap += abs(area[i]["Ii"] - area[i]["Ii_y"])
+                gap += abs(area[i]["Pi"] - area[i]["Pi_y"])
+                gap += abs(area[i]["Qi"] - area[i]["Qi_y"])
+        for i in range(nl):
+            gap += abs(observatory[i]["Vij_x"] - observatory[i]["Vij_y"])
+            gap += abs(observatory[i]["Pij_x"] - observatory[i]["Pij_y"])
+            gap += abs(observatory[i]["Qij_x"] - observatory[i]["Qij_y"])
+            gap += abs(observatory[i]["Iij_x"] - observatory[i]["Iij_y"])
+        Gap = gap
+        k = k + 1
+
+    return area
 
 
 def turn_to_power(list, power=1):
@@ -140,15 +220,15 @@ def ancestor_children_generation(branch_f, branch_t, nb, Branch_R, Branch_X, SMA
     return Area
 
 
-def sub_problem(Index, Area, ru):
+def sub_problem(Area, Observatory, Index, Ru):
     """
     Sub-problem optimization for each area, where the area is defined one bus and together with the
     :param Index: Target area
     :param Area: Area connection information
+    :param index: Target area
     :param ru: Penalty factor for the second order constraints
     :return: Area, updated information
     """
-
     modelX = Model("sub_opf_x")  # Sub-optimal power flow x update
     modelY = Model("sub_opf_y")  # Sub-optimal power flow y update
 
