@@ -178,12 +178,20 @@ def ancestor_children_generation(branch_f, branch_t, nb, Branch_R, Branch_X, SMA
             nChildren = len(ChildrenBranch[0])
             temp["Ci"] = []
             temp["Cbranch"] = []
+            temp["BR_R_C"] = []
+            temp["BR_X_C"] = []
             for j in range(nChildren):
                 temp["Cbranch"].append(int(ChildrenBranch[0][j]))
                 temp["Ci"].append(int(branch_t[temp["Cbranch"][j]]))  # The children bus
+            temp["nChildren"] = nChildren
+            temp["nCi"] = Branch_R[ChildrenBranch].tolist()
+            temp["BR_X_C"] = Branch_X[ChildrenBranch].tolist()
         else:
             temp["Cbranch"] = []
             temp["Ci"] = []
+            temp["nCi"] = 0
+            temp["BR_R_C"] = []
+            temp["BR_X_C"] = []
 
         # Update the node information
         if i in gen[:, GEN_BUS]:
@@ -220,19 +228,20 @@ def ancestor_children_generation(branch_f, branch_t, nb, Branch_R, Branch_X, SMA
     return Area
 
 
-def sub_problem(Area, Observatory, Index, Ru):
+def sub_problem(area, observatory, index, ru):
     """
     Sub-problem optimization for each area, where the area is defined one bus and together with the
     :param Index: Target area
-    :param Area: Area connection information
+    :param area: Area connection information
+    :param observatory: Observatory information
     :param index: Target area
-    :param ru: Penalty factor for the second order constraints
-    :return: Area, updated information
+    :param Ru: penalty factor in the objective function
+    :return: Updated area and observatory information
     """
     modelX = Model("sub_opf_x")  # Sub-optimal power flow x update
     modelY = Model("sub_opf_y")  # Sub-optimal power flow y update
 
-    if Area[Index]["Type"] == "ROOT":  # Only needs to meet the KCL equation
+    if area[index]["Type"] == "ROOT":  # Only needs to meet the KCL equation
         # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x]
         # zi= [pi_z,qi_z,Vi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
         # The following types of constraints should be considered
@@ -251,78 +260,108 @@ def sub_problem(Area, Observatory, Index, Ru):
         # In the x update, receive V_A_j_z from children set
 
         # Step 1: construct the x update problem
-        nChildren = len(Area[Index]["Ci"])
-        V_Ci_z = []
-        Pi_Ci_x = []
-        Qi_Ci_x = []
-        li_Ci_x = []
-        mu_Pi_Ci_x = []
-        mu_Qi_Ci_x = []
-        mu_li_Ci_x = []
-        Line_R = []
-        Line_X = []
-        for i in range(nChildren):  # Information exchange
-            V_Ci_z.append(Area[Area[Index]["Ci"][i]]["V_Ai_z"])  # Voltage magnitude stored in children set
+        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pg")
+        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        pi = modelX.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="pi")
+        qi = modelX.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="qi")
+        Vi = modelX.addVar(lb=area[index]["VMIN"], ub=area[index]["VMAX"], vtype=GRB.CONTINUOUS, name="Vi")
+        X = ["Pg", "Qg", "pi", "qi", "Vi"]
+        Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y"]
+        Yij = ["Pij_x", "Qij_x", "Iij_x"]
 
-            Pi_Ci_x = Pi_Ci_x.append(
-                Area[Area[Index]["Ci"][i]]["Pi_x"])  # Active power from i to Ai stored in children set
-            Qi_Ci_x = Qi_Ci_x.append(
-                Area[Area[Index]["Ci"][i]]["Qi_x"])  # Reactive power from i to Ai stored in children set
-            li_Ci_x = li_Ci_x.append(Area[Area[Index]["Ci"][i]]["li_x"])  # Current from i to Ai stored in children set
-            mu_Pi_Ci_x = mu_Pi_Ci_x.append(
-                Area[Area[Index]["Ci"][i]]["mu_Pi_x"])  # Multiplier of active power from i to Ai stored in children set
-            mu_Qi_Ci_x = mu_Qi_Ci_x.append(Area[Area[Index]["Ci"][i]][
-                                               "mu_Qi_x"])  # Multiplier of reactive power from i to Ai stored in children set
-            mu_li_Ci_x = mu_li_Ci_x.append(
-                Area[Area[Index]["Ci"][i]]["mu_li_x"])  # Multiplier of current from i to Ai stored in children set
-            Line_R = Line_R.append(Area[Area[Index]["Ci"][i]]["Line_R"])  # Line resistance of the children area
-            Line_X = Line_X.append(Area[Area[Index]["Ci"][i]]["Line_X"])  # Line reactance of the children area
+        # Obtain information from the children bus, for voltage
+        Vi0 = 0
+        mu_Vi = 0
+        for i in range(area[index]["nCi"]):
+            Vi0 += observatory[area[index]["Ci"][i]]["Vij_y"]
+            mu_Vi += observatory[area[index]["Ci"][i]]["mu_Vij"]
 
-        if len(Area["Gen"]) != 0:
-            pi_x = modelX.addVar(lb=Area[Index]["PMIN"] - Area[Index]["PD"], ub=Area[Index]["PMAX"] - Area[Index]["PD"],
-                                 vtype=GRB.CONTINUOUS, name="pi")
-            qi_x = modelX.addVar(lb=Area[Index]["QMIN"] - Area[Index]["QD"], ub=Area[Index]["QMAX"] - Area[Index]["QD"],
-                                 vtype=GRB.CONTINUOUS, name="qi")
-            Pg = modelX.addVar(lb=Area[Index]["PMIN"], ub=Area[Index]["PMAX"], vtype=GRB.CONTINUOUS, name="Pg")
-            Qg = modelX.addVar(lb=Area[Index]["QMIN"], ub=Area[Index]["QMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        Vi0 = (Vi0 + area[index]["Vi_y"]) / (area[index]["nCi"] + 1)
+        mu_Vi = (mu_Vi + area[index]["mu_Vi"]) / (area[index]["nCi"] + 1)
+        pi0 = area[index]["pi_y"]
+        qi0 = area[index]["qi_y"]
+        modelX.addConstr(Pg - pi == area[index]["PD"])
+        modelX.addConstr(Qg - qi == area[index]["QD"])
+        objX = area["a"] * Pg * Pg + area["b"] * Pg + area["c"] + mu_Vi * Vi + ru * (Vi - Vi0) * (Vi - Vi0) / 2 + \
+               area[index]["mu_pi"] * pi + ru * (pi - pi0) * (pi - pi0) / 2 + \
+               area[index]["mu_qi"] * qi + ru * (qi - qi0) * (qi - qi0) / 2
 
-            pi_z = modelY.addVar(lb=Area[Index]["PMIN"] - Area[Index]["PD"], ub=Area[Index]["PMAX"] - Area[Index]["PD"],
-                                 vtype=GRB.CONTINUOUS, name="pi")
-            qi_z = modelY.addVar(lb=Area[Index]["QMIN"] - Area[Index]["QD"], ub=Area[Index]["QMAX"] - Area[Index]["QD"],
-                                 vtype=GRB.CONTINUOUS, name="qi")
+        modelX.setObjective(objX)
+        modelX.Params.OutputFlag = 0
+        modelX.Params.LogToConsole = 0
+        modelX.Params.DisplayInterval = 1
+        modelX.Params.LogFile = ""
+        modelX.optimize()
 
-        else:
-            pi_x = modelX.addVar(lb=- Area[Index]["PD"], ub=- Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
-            qi_x = modelX.addVar(lb=- Area[Index]["QD"], ub=- Area[Index]["QD"], vtype=GRB.CONTINUOUS, name="Qi")
-            Pg = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pg")
-            Qg = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Qg")
-            pi_z = modelY.addVar(lb=- Area[Index]["PD"], ub=- Area[Index]["PD"], vtype=GRB.CONTINUOUS, name="Pi")
-            qi_z = modelY.addVar(lb=- Area[Index]["QD"], ub=- Area[Index]["QD"], vtype=GRB.CONTINUOUS, name="Qi")
+        for i in X:
+            area[index][i] = modelX.getVarByName(i)
 
-        Vi_x = modelX.addVar(lb=Area[Index]["VMIN"], ub=Area[Index]["VMAX"], vtype=GRB.CONTINUOUS, name="Vi")
+        # For the Y update
+        pi_y = modelY.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="pi_y")
+        qi_y = modelY.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="qi_y")
+        Vi_y = modelY.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="Vi_y")
+        Pij_y = {}
+        Qij_y = {}
+        Iij_y = {}
+        for i in range(area[index]["nCi"]):
+            Pij_y[i] = modelY.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="Pij_y{0}".format(i))
+            Qij_y[i] = modelY.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="Qij_y{0}".format(i))
+            Iij_y[i] = modelY.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="Iij_y{0}".format(i))
 
-        Pji_z = modelY.addVar(1, nChildren)
-        Qji_z = modelY.addVar(1, nChildren)
-        lji_z = modelY.addVar(1, nChildren)
-
-        modelX.addConstr(Pg - pi_x == Area[Index]["PD"])
-        modelX.addConstr(Qg - qi_x == Area[Index]["QD"])
-
-        # KCL equations
-        # 1) Active power balance equation
         expr = 0
-        for i in range(nChildren):
-            expr = expr + Pji_z[i] - lji_z[i] * Line_R[i]
-        modelY.addConstr(lhs=expr + pi_z, sense=GRB.EQUAL, rhs=0)
-        # 2) Reactive power balance equation
+        for i in range(area[index]["nCi"]):
+            expr += Pij_y[i] - Iij_y[i] * area[index]["BR_R_C"][i]
+        modelY.addConstr(pi_y + expr == 0)
+
         expr = 0
-        for i in range(nChildren):
-            expr = expr + Qji_z[i] - lji_z[i] * Line_X[i]
-        modelY.addConstr(lhs=expr + qi_z, sense=GRB.EQUAL, rhs=0)
+        for i in range(area[index]["nCi"]):
+            expr += Qij_y[i] - Iij_y[i] * area[index]["BR_X_C"][i]
+        modelY.addConstr(qi_y + expr == 0)
+        # obtain the multiper and center
+        Vi_y0 = area[index]["Vi"]
+        pi_y0 = area[index]["pi"]
+        qi_y0 = area[index]["qi"]
+
+        objY = -area[index]["mu_Vi"] * Vi_y + ru * (Vi_y - Vi_y0) * (Vi_y - Vi_y0) / 2 - area[index][
+            "mu_pi"] * pi + ru * (
+                       pi_y - pi_y0) * (pi_y - pi_y0) / 2 - area[index]["mu_qi"] * qi_y + ru * (qi_y - qi_y0) * (
+                       qi_y - qi_y0) / 2
+
+        for i in range(area[index]["nCi"]):
+            objY += -observatory[area[index]["Cbranch"][i]]["mu_Pij"] * Pij_y[i] + ru * (
+                        Pij_y[i] - observatory[area[index]["Cbranch"][i]]["Pij_x"]) * (
+                                Pij_y[i] - observatory[area[index]["Cbranch"][i]]["Pij_x"]) / 2
+            objY += -observatory[area[index]["Cbranch"][i]]["mu_Qij"] * Qij_y[i] + ru * (
+                        Qij_y[i] - observatory[area[index]["Cbranch"][i]]["Qij_x"]) * (
+                                Qij_y[i] - observatory[area[index]["Cbranch"][i]]["Qij_x"]) / 2
+            objY += -observatory[area[index]["Cbranch"][i]]["mu_Iij"] * Iij_y[i] + ru * (
+                        Iij_y[i] - observatory[area[index]["Cbranch"][i]]["Iij_x"]) * (
+                                Iij_y[i] - observatory[area[index]["Cbranch"][i]]["Iij_x"]) / 2
+
+        modelY.setObjective(objY)
+        modelY.Params.OutputFlag = 0
+        modelY.Params.LogToConsole = 0
+        modelY.Params.DisplayInterval = 1
+        modelY.Params.LogFile = ""
+        modelY.optimize()
+
+        for i in Y:
+            area[index][i] = modelY.getVarByName(i)
+        # Update the multiper
+        for i in range(area[index]["nCi"]):
+            observatory[area[index]["Cbranch"][i]]["Pij_y"] = modelY.getVarByName("Pij_y{0}".format(i))
+            observatory[area[index]["Cbranch"][i]]["Qij_y"] = modelY.getVarByName("Qij_y{0}".format(i))
+            observatory[area[index]["Cbranch"][i]]["Iij_y"] = modelY.getVarByName("Iij_y{0}".format(i))
+            observatory[area[index]["Cbranch"][i]]["mu_Pij"] += ru*(observatory[area[index]["Cbranch"][i]]["Pij_x"]-observatory[area[index]["Cbranch"][i]]["Pij_y"])
+            observatory[area[index]["Cbranch"][i]]["mu_Qij"] += ru*(observatory[area[index]["Cbranch"][i]]["Qij_x"]-observatory[area[index]["Cbranch"][i]]["Qij_y"])
+            observatory[area[index]["Cbranch"][i]]["mu_Iij"] += ru*(observatory[area[index]["Cbranch"][i]]["Iij_x"]-observatory[area[index]["Cbranch"][i]]["Iij_y"])
 
 
 
-    elif Area[Index]["Type"] == "LEAF":  # Only needs to meet the KVL equation
+
+
+
+    elif area[index]["Type"] == "LEAF":  # Only needs to meet the KVL equation
         # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
         # zi = [qi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z]#
         # The following types of constraints should be considered
@@ -340,8 +379,17 @@ def sub_problem(Area, Observatory, Index, Ru):
         # Information exchange
         # In the z update, receive Vj_x and associate Lagrange multiper from ancestor bus
         # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus
-
-        Pji_x = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
+        X = ["Pg", "Qg", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
+        Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y"]
+        Yij = ["Pij_x", "Qij_x", "Iij_x"]
+        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pg")
+        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        pi = modelX.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="pi")
+        qi = modelX.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="qi")
+        Pi = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Pi")
+        Qi = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Qi")
+        Ii = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Ii")
+        Vi = modelX.addVar(lb=area[index]["VMIN"], ub=area[index]["VMAX"], vtype=GRB.CONTINUOUS, name="Vi")
 
     else:  # Only needs to meet the KVL equation
         # xi = [Pgi,Qgi,pi_x,pi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
@@ -366,10 +414,11 @@ def sub_problem(Area, Observatory, Index, Ru):
         # Information exchange
         # In the z update, receive Pj_x, Qj_x, Ij_x and associate Lagrange multiper from children set; Vj_x and associate Lagrange multiper from ancestor bus
         # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus; and V_A_j_z from children set. In the x update, no multiper is required.
+        X = ["Pg", "Qg", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
+        Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y"]
+        Yij = ["Pij_x", "Qij_x", "Iij_x"]
 
-        Pji_x = modelX.addVar(lb=0, ub=0, vtype=GRB.CONTINUOUS, name="Pij")
-
-    return Area
+    return area, observatory
 
 
 if __name__ == "__main__":
