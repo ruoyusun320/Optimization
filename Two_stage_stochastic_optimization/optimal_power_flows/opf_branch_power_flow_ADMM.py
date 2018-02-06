@@ -69,16 +69,16 @@ def run(mpc):
         # The self observation
         area[i]["pi_y"] = area[i]["pi"]
         area[i]["qi_y"] = area[i]["qi"]
-        area[i]["Vi_y"] = area[i]["Vi"]
         if area[i]["TYPE"] != "ROOT":
+            area[i]["Vi_y"] = area[i]["Vi"]
             area[i]["Ii_y"] = area[i]["Ii"]
             area[i]["Pi_y"] = area[i]["Pi"]
             area[i]["Qi_y"] = area[i]["Qi"]
         # The multipliers
         area[i]["mu_pi"] = area[i]["pi"] - area[i]["pi_y"]
         area[i]["mu_qi"] = area[i]["qi"] - area[i]["qi_y"]
-        area[i]["mu_Vi"] = area[i]["Vi"] - area[i]["Vi_y"]
         if area[i]["TYPE"] != "ROOT":
+            area[i]["mu_Vi"] = area[i]["Vi"] - area[i]["Vi_y"]
             area[i]["mu_Ii"] = area[i]["Ii"] - area[i]["Ii_y"]
             area[i]["mu_Pi"] = area[i]["Pi"] - area[i]["Pi_y"]
             area[i]["mu_Qi"] = area[i]["Qi"] - area[i]["Qi_y"]
@@ -382,6 +382,9 @@ def sub_problem(area, observatory, index, ru):
                     observatory[area[index]["Cbranch"][i]]["Iij_x"] - observatory[area[index]["Cbranch"][i]][
                 "Iij_y"])
 
+        # Step 3: local multipiler update
+        area[index]["mu_pi"] += ru * (area[index]["pi"] - area[index]["pi_y"])
+        area[index]["mu_qi"] += ru * (area[index]["qi"] - area[index]["qi_y"])
     elif area[index]["Type"] == "LEAF":  # Only needs to meet the KVL equation
         # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
         # zi = [qi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z]#
@@ -507,10 +510,17 @@ def sub_problem(area, observatory, index, ru):
             area[index][i] = modelY.getVarByName(i)
         # 1.8) Update the observatory information
         # 1.8.1) Update ancestor information(voltage, y)
-        observatory[area[index]["Abranch"]]["Vij_y"] = area[index]["Vij_y"]
+        observatory[area[index]["Abranch"]]["Vij_y"] = modelY.getVarByName("Vij_y")
         observatory[area[index]["Abranch"]]["mu_Vij"] += ru * (
                 observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
 
+        # Step 3: local multipiler update
+        area[index]["mu_pi"] += ru * (area[index]["pi"] - area[index]["pi_y"])
+        area[index]["mu_qi"] += ru * (area[index]["qi"] - area[index]["qi_y"])
+        area[index]["mu_Vi"] += ru * (area[index]["Vi"] - area[index]["Vi_y"])
+        area[index]["mu_Ii"] += ru * (area[index]["Ii"] - area[index]["Ii_y"])
+        area[index]["mu_Pi"] += ru * (area[index]["Pi"] - area[index]["Pi_y"])
+        area[index]["mu_Qi"] += ru * (area[index]["Qi"] - area[index]["Qi_y"])
     else:  # Only needs to meet the KVL equation
         # xi = [Pgi,Qgi,pi_x,pi_x,Vi_x,Ii_x,Pi_x,Qi_x]# Pi_x represent the power from i to its ancestor
         # zi = [pi_z,pi_z,Vi_z,Ii_z,Pi_z,Qi_z,V_A_i_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]#
@@ -692,9 +702,9 @@ def sub_problem(area, observatory, index, ru):
             area[index][i] = modelY.getVarByName(i)
         # 1.8) Update the observatory information
         # 1.8.1) Update ancestor information(voltage,y)
-        observatory[area[index]["Abranch"]]["Vij_y"] = area[index]["Vij_y"]
+        observatory[area[index]["Abranch"]]["Vij_y"] = modelY.getVarByName("Vij_y")
         observatory[area[index]["Abranch"]]["mu_Vij"] += ru * (
-                    observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
+                observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
         # 1.8.2) Update children information(power and current, y)
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Pij_y"] = modelY.getVarByName("Pij_y{0}".format(i))
@@ -709,6 +719,14 @@ def sub_problem(area, observatory, index, ru):
             observatory[area[index]["Cbranch"][i]]["mu_Iij"] += ru * (
                     observatory[area[index]["Cbranch"][i]]["Iij_x"] - observatory[area[index]["Cbranch"][i]][
                 "Iij_y"])
+
+        # Step 3: local multipiler update
+        area[index]["mu_pi"] += ru * (area[index]["pi"] - area[index]["pi_y"])
+        area[index]["mu_qi"] += ru * (area[index]["qi"] - area[index]["qi_y"])
+        area[index]["mu_Vi"] += ru * (area[index]["Vi"] - area[index]["Vi_y"])
+        area[index]["mu_Ii"] += ru * (area[index]["Ii"] - area[index]["Ii_y"])
+        area[index]["mu_Pi"] += ru * (area[index]["Pi"] - area[index]["Pi_y"])
+        area[index]["mu_Qi"] += ru * (area[index]["Qi"] - area[index]["Qi_y"])
 
     return area, observatory
 
