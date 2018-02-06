@@ -367,6 +367,7 @@ def sub_problem(area, observatory, index, ru):
         for i in Y:
             area[index][i] = modelY.getVarByName(i)
         # 1.8) Update the observatory information
+        # 1.8.1) Update ancestor information(power and current inforamtion, y)
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Pij_y"] = modelY.getVarByName("Pij_y{0}".format(i))
             observatory[area[index]["Cbranch"][i]]["Qij_y"] = modelY.getVarByName("Qij_y{0}".format(i))
@@ -505,6 +506,7 @@ def sub_problem(area, observatory, index, ru):
         for i in Y:
             area[index][i] = modelY.getVarByName(i)
         # 1.8) Update the observatory information
+        # 1.8.1) Update ancestor information(voltage, y)
         observatory[area[index]["Abranch"]]["Vij_y"] = area[index]["Vij_y"]
         observatory[area[index]["Abranch"]]["mu_Vij"] += ru * (
                 observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
@@ -693,7 +695,7 @@ def sub_problem(area, observatory, index, ru):
         observatory[area[index]["Abranch"]]["Vij_y"] = area[index]["Vij_y"]
         observatory[area[index]["Abranch"]]["mu_Vij"] += ru * (
                     observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
-        # 1.8.2) Update children information(voltage,y)
+        # 1.8.2) Update children information(power and current, y)
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Pij_y"] = modelY.getVarByName("Pij_y{0}".format(i))
             observatory[area[index]["Cbranch"][i]]["Qij_y"] = modelY.getVarByName("Qij_y{0}".format(i))
