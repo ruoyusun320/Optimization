@@ -19,6 +19,9 @@ from pypower.idx_gen import GEN_BUS, VG, PG, QG, PMAX, PMIN, QMAX, QMIN
 from pypower.ext2int import ext2int
 from math import sqrt
 from copy import deepcopy
+from numpy import array
+import matplotlib.pyplot as plt
+
 def run(mpc):
     """
     Gurobi based optimal power flow modelling and solution
@@ -185,7 +188,18 @@ def run(mpc):
     obj = 0
     for i in range(nb):
         obj += area[i]["COST"]
+    Gap_index=array(Gap_index)
+    Dual_gap_index=array(Dual_gap_index)
+    plt.figure(1)
+    plt.subplot(211)
+    plt.plot(Gap_index)
+    plt.ylabel('Primal residual')
 
+    plt.subplot(212)
+    plt.plot(Dual_gap_index)
+    plt.ylabel('Dual residual')
+
+    plt.show()
     return obj, area
 
 
