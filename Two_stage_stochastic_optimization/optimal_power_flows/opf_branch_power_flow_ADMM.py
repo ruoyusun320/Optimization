@@ -82,6 +82,7 @@ def run(mpc):
             area[i]["mu_Ii"] = area[i]["Ii"] - area[i]["Ii_y"]
             area[i]["mu_Pi"] = area[i]["Pi"] - area[i]["Pi_y"]
             area[i]["mu_Qi"] = area[i]["Qi"] - area[i]["Qi_y"]
+        area[i]["COST"] = 0
         # Spread the information to the observatory
 
     observatory = []
@@ -105,6 +106,7 @@ def run(mpc):
         observatory.append(temp)
     # Begin the iteration,
     Gap = 1000
+    Gap_index = []
     k = 0
     kmax = 10000
     ru = 0.01
@@ -130,6 +132,7 @@ def run(mpc):
             gap += abs(observatory[i]["Qij_x"] - observatory[i]["Qij_y"])
             gap += abs(observatory[i]["Iij_x"] - observatory[i]["Iij_y"])
         Gap = gap
+        Gap_index.append(Gap)
         k = k + 1
 
     return area
@@ -246,17 +249,16 @@ def sub_problem(area, observatory, index, ru):
 
     if area[index]["Type"] == "ROOT":  # Only needs to meet the KCL equation
         # xi = [Pgi,Qgi,pi_x,qi_x,Vi_x]
-        # zi= [pi_z,qi_z,Vi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
+        # zi= [pi_z,qi_z,Pj_i_z(j in children set of i),Qj_i_z,Ij_i_z]
         # The following types of constraints should be considered
         # 1) pi_x = pi_z
         # 2) qi_x = qi_z
-        # 3) Vi_x = Vi_z
-        # 4) Vi_x = V_A_j_z j in children set of i
+        # 3) Vi_x = V_A_j_z j in children set of i
 
-        # 5）Pj_x = Pj_i_z j in children set of i, active power from j to i
-        # 6）Qj_x = Qj_i_z j in children set of i
-        # 7）Ij_x = Ij_i_z j in children set of i
-        # constraint 5)-7) are managed by the children buses
+        # 4）Pj_x = Pj_i_z j in children set of i, active power from j to i
+        # 5）Qj_x = Qj_i_z j in children set of i
+        # 6）Ij_x = Ij_i_z j in children set of i
+        # constraint 4)-6) are managed by the children buses in the y-update problem
 
         # Information exchange
         # In the z update, receive Pj_x, Qj_x, Ij_x and associate Lagrange multiper from children set
@@ -308,7 +310,9 @@ def sub_problem(area, observatory, index, ru):
         # 1.8) Update the observatory information
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Vij_x"] = area[index]["Vi"]
-
+        # 1.9) Update objective function
+        area[index]["COST"] = area["a"] * area[index]["Pg"] * area[index]["Pg"] + area["b"] * area[index]["Pg"] + area[
+            "c"]
         # Step 2: construct the Y update problem
         # 1) Update information from the observatory (connected via Cbranch)
         # 1.1) Update the center information
@@ -317,6 +321,10 @@ def sub_problem(area, observatory, index, ru):
         Pij_y0 = []
         Qij_y0 = []
         Iij_y0 = []
+        for i in range(area[index]["nCi"]):
+            Pij_y0.append(observatory[area[index]["Cbranch"][i]]["Pij_x"])
+            Qij_y0.append(observatory[area[index]["Cbranch"][i]]["Qij_x"])
+            Iij_y0.append(observatory[area[index]["Cbranch"][i]]["Iij_x"])
         # 1.2) Update the multiplier information
         mu_pi_y = area[index]["mu_pi"]
         mu_qi_y = area[index]["mu_qi"]
@@ -324,9 +332,6 @@ def sub_problem(area, observatory, index, ru):
         mu_Qij = []
         mu_Iij = []
         for i in range(area[index]["nCi"]):
-            Pij_y0.append(observatory[area[index]["Cbranch"][i]]["Pij_x"])
-            Qij_y0.append(observatory[area[index]["Cbranch"][i]]["Qij_x"])
-            Iij_y0.append(observatory[area[index]["Cbranch"][i]]["Iij_x"])
             mu_Pij.append(observatory[area[index]["Cbranch"][i]]["mu_Pij"])
             mu_Qij.append(observatory[area[index]["Cbranch"][i]]["mu_Qij"])
             mu_Iij.append(observatory[area[index]["Cbranch"][i]]["mu_Iij"])
@@ -350,12 +355,12 @@ def sub_problem(area, observatory, index, ru):
             expr += Qij_y[i] - Iij_y[i] * area[index]["BR_X_C"][i]
         modelY.addConstr(qi_y + expr == 0)
         # 1.5) Formulate objective function
-        objY = -mu_pi_y * pi_y + ru * (pi_y - pi_y0) * (pi_y - pi_y0) / 2 - \
-               -mu_qi_y * qi_y + ru * (qi_y - qi_y0) * (qi_y - qi_y0) / 2
+        objY = -mu_pi_y * pi_y + ru * (pi_y - pi_y0) * (pi_y - pi_y0) / 2 \
+               - mu_qi_y * qi_y + ru * (qi_y - qi_y0) * (qi_y - qi_y0) / 2
         for i in range(area[index]["nCi"]):
-            objY += -mu_Pij[i] * Pij_y[i] + ru * (Pij_y[i] - Pij_y0[i]) * (Pij_y[i] - Pij_y0[i]) / 2 + \
-                    -mu_Qij[i] * Qij_y[i] + ru * (Qij_y[i] - Qij_y0[i]) * (Qij_y[i] - Qij_y0[i]) / 2 + \
-                    -mu_Iij[i] * Iij_y[i] + ru * (Iij_y[i] - Iij_y0[i]) * (Iij_y[i] - Iij_y0[i]) / 2
+            objY += -mu_Pij[i] * Pij_y[i] + ru * (Pij_y[i] - Pij_y0[i]) * (Pij_y[i] - Pij_y0[i]) / 2 \
+                    - mu_Qij[i] * Qij_y[i] + ru * (Qij_y[i] - Qij_y0[i]) * (Qij_y[i] - Qij_y0[i]) / 2 \
+                    - mu_Iij[i] * Iij_y[i] + ru * (Iij_y[i] - Iij_y0[i]) * (Iij_y[i] - Iij_y0[i]) / 2
         # 1.6) Solve the problem
         modelY.setObjective(objY)
         modelY.Params.OutputFlag = 0
@@ -404,7 +409,7 @@ def sub_problem(area, observatory, index, ru):
         # In the z update, receive Vj_x and associate Lagrange multiper from ancestor bus
         # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus
         X = ["Pg", "Qg", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
-        Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y", "Vij_y"]
+        Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y"]
         # Step 1: construct the X update problem
         # 1) Update information from the observatory (connected via Abranch)
         # 1.1) Update the center information
@@ -436,12 +441,12 @@ def sub_problem(area, observatory, index, ru):
         modelX.addConstr(Pi * Pi + Qi * Qi <= Vi * Ii)
         # 1.5) Formulate objective function
         objX = area["a"] * Pg * Pg + area["b"] * Pg + area["c"] \
-               + mu_Vi * Vi + ru * (Vi - Vi0) * (Vi - Vi0) / 2 + \
-               mu_pi * pi + ru * (pi - pi0) * (pi - pi0) / 2 + \
-               mu_qi * qi + ru * (qi - qi0) * (qi - qi0) / 2 + \
-               mu_Pi * Pi + ru * (Pi - Pi0) * (Pi - Pi0) / 2 + \
-               mu_Qi * Qi + ru * (Qi - Qi0) * (Qi - Qi0) / 2 + \
-               mu_Ii * Ii + ru * (Ii - Ii0) * (Ii - Ii0) / 2
+               + mu_Vi * Vi + ru * (Vi - Vi0) * (Vi - Vi0) / 2 \
+               + mu_pi * pi + ru * (pi - pi0) * (pi - pi0) / 2 \
+               + mu_qi * qi + ru * (qi - qi0) * (qi - qi0) / 2 \
+               + mu_Pi * Pi + ru * (Pi - Pi0) * (Pi - Pi0) / 2 \
+               + mu_Qi * Qi + ru * (Qi - Qi0) * (Qi - Qi0) / 2 \
+               + mu_Ii * Ii + ru * (Ii - Ii0) * (Ii - Ii0) / 2
         # 1.6) Solve the problem
         modelX.setObjective(objX)
         modelX.Params.OutputFlag = 0
@@ -466,7 +471,7 @@ def sub_problem(area, observatory, index, ru):
         Qi_y0 = area[index]["Qi"]
         Ii_y0 = area[index]["Ii"]
         Vi_y0 = area[index]["Vi"]
-        Vij_y0 = observatory[area[index]["Abranch"]]["Vij"]
+        Vij_y0 = observatory[area[index]["Abranch"]]["Vij_x"]
         # 1.2) Update the multiplier information
         mu_Pi_y = area[index]["mu_Pi"]
         mu_Qi_y = area[index]["mu_Qi"]
@@ -491,13 +496,13 @@ def sub_problem(area, observatory, index, ru):
         modelY.addConstr(Vij_y - Vi_y + 2 * area[i]["BR_R"] * Pi_y + 2 * area[i]["BR_X"] * Qi_y - Ii_y * (
                 area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
         # 1.5) Formulate objective function
-        objY = -mu_Pi_y * Pi_y + ru * (Pi_y - Pi_y0) * (Pi_y - Pi_y0) / 2 + \
-               -mu_Qi_y * Qi_y + ru * (Qi_y - Qi_y0) * (Qi_y - Qi_y0) / 2 + \
-               -mu_Ii_y * Ii_y + ru * (Ii_y - Ii_y0) * (Ii_y - Ii_y0) / 2 + \
-               -mu_Vi_y * Vi_y + ru * (Vi_y - Vi_y0) * (Vi_y - Vi_y0) / 2 + \
-               -mu_pi_y * pi_y + ru * (pi_y - pi_y0) * (pi_y - pi_y0) / 2 + \
-               -mu_qi_y * qi_y + ru * (qi_y - qi_y0) * (qi_y - qi_y0) / 2 + \
-               -mu_Vij_y * Vij_y + ru * (Vij_y - Vij_y0) * (Vij_y - Vij_y0) / 2
+        objY = -mu_Pi_y * Pi_y + ru * (Pi_y - Pi_y0) * (Pi_y - Pi_y0) / 2 \
+               - mu_Qi_y * Qi_y + ru * (Qi_y - Qi_y0) * (Qi_y - Qi_y0) / 2 \
+               - mu_Ii_y * Ii_y + ru * (Ii_y - Ii_y0) * (Ii_y - Ii_y0) / 2 \
+               - mu_Vi_y * Vi_y + ru * (Vi_y - Vi_y0) * (Vi_y - Vi_y0) / 2 \
+               - mu_pi_y * pi_y + ru * (pi_y - pi_y0) * (pi_y - pi_y0) / 2 \
+               - mu_qi_y * qi_y + ru * (qi_y - qi_y0) * (qi_y - qi_y0) / 2 \
+               - mu_Vij_y * Vij_y + ru * (Vij_y - Vij_y0) * (Vij_y - Vij_y0) / 2
         # 1.6) Solve the problem
         modelY.setObjective(objY)
         modelY.Params.OutputFlag = 0
@@ -679,13 +684,13 @@ def sub_problem(area, observatory, index, ru):
         modelY.addConstr(Vij_y - Vi_y + 2 * area[i]["BR_R"] * Pi_y + 2 * area[i]["BR_X"] * Qi_y - Ii_y * (
                 area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
         # 1.5) Formulate objective function
-        objY = -mu_Pi_y * Pi_y + ru * (Pi_y - Pi_y0) * (Pi_y - Pi_y0) / 2 + \
-               -mu_Qi_y * Qi_y + ru * (Qi_y - Qi_y0) * (Qi_y - Qi_y0) / 2 + \
-               -mu_Ii_y * Ii_y + ru * (Ii_y - Ii_y0) * (Ii_y - Ii_y0) / 2 + \
-               -mu_Vi_y * Vi_y + ru * (Vi_y - Vi_y0) * (Vi_y - Vi_y0) / 2 + \
-               -mu_pi_y * pi_y + ru * (pi_y - pi_y0) * (pi_y - pi_y0) / 2 + \
-               -mu_qi_y * qi_y + ru * (qi_y - qi_y0) * (qi_y - qi_y0) / 2 + \
-               -mu_Vij_y * Vij_y + ru * (Vij_y - Vij_y0) * (Vij_y - Vij_y0) / 2
+        objY = -mu_Pi_y * Pi_y + ru * (Pi_y - Pi_y0) * (Pi_y - Pi_y0) / 2 \
+               - mu_Qi_y * Qi_y + ru * (Qi_y - Qi_y0) * (Qi_y - Qi_y0) / 2 \
+               - mu_Ii_y * Ii_y + ru * (Ii_y - Ii_y0) * (Ii_y - Ii_y0) / 2 \
+               - mu_Vi_y * Vi_y + ru * (Vi_y - Vi_y0) * (Vi_y - Vi_y0) / 2 \
+               - mu_pi_y * pi_y + ru * (pi_y - pi_y0) * (pi_y - pi_y0) / 2 \
+               - mu_qi_y * qi_y + ru * (qi_y - qi_y0) * (qi_y - qi_y0) / 2 \
+               - mu_Vij_y * Vij_y + ru * (Vij_y - Vij_y0) * (Vij_y - Vij_y0) / 2
         for i in range(area[index]["nCi"]):
             objY += -mu_Pij[i] * Pij_y[i] + ru * (Pij_y[i] - Pij_y0[i]) * (Pij_y[i] - Pij_y0[i]) / 2 + \
                     -mu_Qij[i] * Qij_y[i] + ru * (Qij_y[i] - Qij_y0[i]) * (Qij_y[i] - Qij_y0[i]) / 2 + \
