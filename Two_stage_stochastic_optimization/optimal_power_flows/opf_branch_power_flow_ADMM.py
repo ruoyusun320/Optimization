@@ -48,7 +48,6 @@ def run(mpc):
     bus[:, QD] = bus[:, QD] / baseMVA
 
     area = ancestor_children_generation(f, t, nb, Branch_R, Branch_X, Slmax, gen, bus, gencost, baseMVA)
-    M = inf
     # Initialize algorithm for each sub area
     # 1) For each area, for self observation
     # x:=[Pg,Qg,pi,qi,Pi,Qi,Vi,Ii]
@@ -109,12 +108,27 @@ def run(mpc):
     Gap_index = []
     k = 0
     kmax = 10000
-    ru = 0.01
+    ru = 1000
     # The iteration
-    while k <= kmax and Gap > 0.0001:
+    while k <= kmax and Gap > 0.001:
 
         for i in range(nb):
-            (area, Observatory) = sub_problem(area, observatory, i, ru)
+            (area, observatory) = sub_problem(area, observatory, i, ru)
+
+        # # multiplier update
+        # for i in range(nb):
+        #     area[i]["mu_pi"] += ru * (area[i]["pi"] - area[i]["pi_y"])
+        #     area[i]["mu_qi"] += ru * (area[i]["qi"] - area[i]["qi_y"])
+        #     if area[i]["TYPE"] != "ROOT":
+        #         area[i]["mu_Vi"] += ru * (area[i]["Vi"] - area[i]["Vi_y"])
+        #         area[i]["mu_Ii"] += ru * (area[i]["Ii"] - area[i]["Ii_y"])
+        #         area[i]["mu_Pi"] += ru * (area[i]["Pi"] - area[i]["Pi_y"])
+        #         area[i]["mu_Qi"] += ru * (area[i]["Qi"] - area[i]["Qi_y"])
+        # for i in range(nl):
+        #     observatory[i]["mu_Vij"] += ru * (observatory[i]["Vij_x"] - observatory[i]["Vij_y"])
+        #     observatory[i]["mu_Pij"] += ru * (observatory[i]["Pij_x"] - observatory[i]["Pij_y"])
+        #     observatory[i]["mu_Qij"] += ru * (observatory[i]["Qij_x"] - observatory[i]["Qij_y"])
+        #     observatory[i]["mu_Iij"] += ru * (observatory[i]["Iij_x"] - observatory[i]["Iij_y"])
 
         # Calculate the gap
         gap = 0
@@ -133,13 +147,19 @@ def run(mpc):
             gap += abs(observatory[i]["Iij_x"] - observatory[i]["Iij_y"])
         Gap = gap
         Gap_index.append(Gap)
+        obj = 0
+        for i in range(nb):
+            obj += area[i]["COST"]
         k = k + 1
-    # compute the objective function
-    obj = 0
-    for i in range(nb):
-        obj += area[i]["COST"]
+        print(k)
+        print(Gap)
+        print(obj)
+        # compute the objective function
+        obj = 0
+        for i in range(nb):
+            obj += area[i]["COST"]
 
-    return obj,area
+    return obj, area
 
 
 def turn_to_power(list, power=1):
@@ -269,7 +289,7 @@ def sub_problem(area, observatory, index, ru):
         # In the x update, receive V_A_j_z from children set
 
         # Step 1: construct the X update problem
-        X = ["Pg", "Qg", "pi", "qi", "Vi"]
+        X = ["PG", "QG", "pi", "qi", "Vi"]
         Y = ["pi_y", "qi_y"]
         # Obtain information from the children bus, for voltage
         # 1) Update information from the observatory (connected via Cbranch)
@@ -288,8 +308,8 @@ def sub_problem(area, observatory, index, ru):
         mu_pi = area[index]["mu_pi"]
         mu_qi = area[index]["mu_qi"]
         # 1.3) Variable announcement
-        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pg")
-        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="PG")
+        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="QG")
         pi = modelX.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="pi")
         qi = modelX.addVar(lb=-inf, ub=inf, vtype=GRB.CONTINUOUS, name="qi")
         Vi = modelX.addVar(lb=area[index]["VMIN"], ub=area[index]["VMAX"], vtype=GRB.CONTINUOUS, name="Vi")
@@ -315,7 +335,8 @@ def sub_problem(area, observatory, index, ru):
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Vij_x"] = area[index]["Vi"]
         # 1.9) Update objective function
-        area[index]["COST"] = area[index]["a"] * area[index]["Pg"] * area[index]["Pg"] + area[index]["b"] * area[index]["Pg"] + area[index]["c"]
+        area[index]["COST"] = area[index]["a"] * area[index]["PG"] ** 2 + area[index]["b"] * area[index]["PG"] + \
+                              area[index]["c"]
         del modelX
         # Step 2: construct the Y update problem
         # 1) Update information from the observatory (connected via Cbranch)
@@ -412,7 +433,7 @@ def sub_problem(area, observatory, index, ru):
         # Information exchange
         # In the z update, receive Vj_x and associate Lagrange multiper from ancestor bus
         # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus
-        X = ["Pg", "Qg", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
+        X = ["PG", "QG", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
         Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y"]
         # Step 1: construct the X update problem
         # 1) Update information from the observatory (connected via Abranch)
@@ -431,8 +452,8 @@ def sub_problem(area, observatory, index, ru):
         mu_pi = area[index]["mu_pi"]
         mu_qi = area[index]["mu_qi"]
         # 1.3) Variable announcement
-        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pg")
-        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="PG")
+        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="QG")
         Pi = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Pi")
         Qi = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Qi")
         Ii = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Ii")
@@ -463,11 +484,12 @@ def sub_problem(area, observatory, index, ru):
             area[index][i] = modelX.getVarByName(i).X
         del modelX
         # 1.8) Update the observatory information
-        observatory[area[index]["Abranch"]]["Pij_x"] = area[index]["Pij"]
-        observatory[area[index]["Abranch"]]["Qij_x"] = area[index]["Qij"]
-        observatory[area[index]["Abranch"]]["Iij_x"] = area[index]["Iij"]
+        observatory[area[index]["Abranch"]]["Pij_x"] = area[index]["Pi"]
+        observatory[area[index]["Abranch"]]["Qij_x"] = area[index]["Qi"]
+        observatory[area[index]["Abranch"]]["Iij_x"] = area[index]["Ii"]
         # 1.9) Update objective function
-        area[index]["COST"] = area[index]["a"] * area[index]["Pg"] * area[index]["Pg"] + area[index]["b"] * area[index]["Pg"] + area[index]["c"]
+        area[index]["COST"] = area[index]["a"] * area[index]["PG"] ** 2 + area[index]["b"] * area[index]["PG"] + \
+                              area[index]["c"]
 
         # Step 2: construct the Y update problem
         # 1) Update information from the observatory (connected via Abranch)
@@ -500,8 +522,8 @@ def sub_problem(area, observatory, index, ru):
         modelY.addConstr(pi_y - Pi_y == 0)
         modelY.addConstr(qi_y - Qi_y == 0)
         # 1.4.2) KVL equation
-        modelY.addConstr(Vij_y - Vi_y + 2 * area[i]["BR_R"] * Pi_y + 2 * area[i]["BR_X"] * Qi_y - Ii_y * (
-                area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
+        modelY.addConstr(Vij_y - Vi_y + 2 * area[index]["BR_R"] * Pi_y + 2 * area[index]["BR_X"] * Qi_y - Ii_y * (
+                area[index]["BR_R"] ** 2 + area[index]["BR_X"] ** 2) == 0)
         # 1.5) Formulate objective function
         objY = -mu_Pi_y * Pi_y + ru * (Pi_y - Pi_y0) * (Pi_y - Pi_y0) / 2 \
                - mu_Qi_y * Qi_y + ru * (Qi_y - Qi_y0) * (Qi_y - Qi_y0) / 2 \
@@ -557,7 +579,7 @@ def sub_problem(area, observatory, index, ru):
         # Information exchange
         # In the z update, receive Pj_x, Qj_x, Ij_x and associate Lagrange multiper from children set; Vj_x and associate Lagrange multiper from ancestor bus
         # In the x update, receive Pi_j_z, Qi_j_z and Ii_j_z from ancestor bus; and V_A_j_z from children set. In the x update, no multiper is required.
-        X = ["Pg", "Qg", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
+        X = ["PG", "QG", "pi", "qi", "Pi", "Qi", "Ii", "Vi"]
         Y = ["pi_y", "qi_y", "Pi_y", "Qi_y", "Ii_y", "Vi_y"]
 
         # Step 1: construct the X update problem
@@ -587,8 +609,8 @@ def sub_problem(area, observatory, index, ru):
             mu_Vi += observatory[area[index]["Cbranch"][i]]["mu_Vij"]
         mu_Vi = (mu_Vi + area[index]["mu_Vi"]) / (area[index]["nCi"] + 1)
         # 1.3) Variable announcement
-        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="Pg")
-        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="Qg")
+        Pg = modelX.addVar(lb=area[index]["PGMIN"], ub=area[index]["PGMAX"], vtype=GRB.CONTINUOUS, name="PG")
+        Qg = modelX.addVar(lb=area[index]["QGMIN"], ub=area[index]["QGMAX"], vtype=GRB.CONTINUOUS, name="QG")
         Pi = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Pi")
         Qi = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Qi")
         Ii = modelX.addVar(lb=-area[index]["SMAX"], ub=area[index]["SMAX"], vtype=GRB.CONTINUOUS, name="Ii")
@@ -621,13 +643,14 @@ def sub_problem(area, observatory, index, ru):
             area[index][i] = modelX.getVarByName(i).X
         del modelX
         # 1.8) Update the observatory information
-        observatory[area[index]["Abranch"]]["Pij_x"] = area[index]["Pij"]
-        observatory[area[index]["Abranch"]]["Qij_x"] = area[index]["Qij"]
-        observatory[area[index]["Abranch"]]["Iij_x"] = area[index]["Iij"]
+        observatory[area[index]["Abranch"]]["Pij_x"] = area[index]["Pi"]
+        observatory[area[index]["Abranch"]]["Qij_x"] = area[index]["Qi"]
+        observatory[area[index]["Abranch"]]["Iij_x"] = area[index]["Ii"]
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Vij_x"] = area[index]["Vi"]
         # 1.9) Update objective function
-        area[index]["COST"] = area[index]["a"] * area[index]["Pg"] * area[index]["Pg"] + area[index]["b"] * area[index]["Pg"] + area[index]["c"]
+        area[index]["COST"] = area[index]["a"] * area[index]["PG"] ** 2 + area[index]["b"] * area[index]["PG"] + \
+                              area[index]["c"]
         # Step 2: construct the Y update problem
         # 1) Update information from the observatory (connected via Abranch and Cbranches)
         # 1.1) Update the center information
@@ -691,8 +714,8 @@ def sub_problem(area, observatory, index, ru):
             expr += Qij_y[i] - Iij_y[i] * area[index]["BR_X_C"][i]
         modelY.addConstr(qi_y + expr == Qi_y)
         # 1.4.2) KVL equation
-        modelY.addConstr(Vij_y - Vi_y + 2 * area[i]["BR_R"] * Pi_y + 2 * area[i]["BR_X"] * Qi_y - Ii_y * (
-                area[i]["BR_R"] ** 2 + area[i]["BR_X"] ** 2) == 0)
+        modelY.addConstr(Vij_y - Vi_y + 2 * area[index]["BR_R"] * Pi_y + 2 * area[index]["BR_X"] * Qi_y - Ii_y * (
+                area[index]["BR_R"] ** 2 + area[index]["BR_X"] ** 2) == 0)
         # 1.5) Formulate objective function
         objY = -mu_Pi_y * Pi_y + ru * (Pi_y - Pi_y0) * (Pi_y - Pi_y0) / 2 \
                - mu_Qi_y * Qi_y + ru * (Qi_y - Qi_y0) * (Qi_y - Qi_y0) / 2 \
@@ -718,8 +741,8 @@ def sub_problem(area, observatory, index, ru):
         # 1.8) Update the observatory information
         # 1.8.1) Update ancestor information(voltage,y)
         observatory[area[index]["Abranch"]]["Vij_y"] = modelY.getVarByName("Vij_y").X
-        observatory[area[index]["Abranch"]]["mu_Vij"] += ru * (
-                observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
+        # observatory[area[index]["Abranch"]]["mu_Vij"] += ru * (
+        #         observatory[area[index]["Abranch"]]["Vij_x"] - observatory[area[index]["Abranch"]]["Vij_y"])
         # 1.8.2) Update children information(power and current, y)
         for i in range(area[index]["nCi"]):
             observatory[area[index]["Cbranch"][i]]["Pij_y"] = modelY.getVarByName("Pij_y{0}".format(i)).X
