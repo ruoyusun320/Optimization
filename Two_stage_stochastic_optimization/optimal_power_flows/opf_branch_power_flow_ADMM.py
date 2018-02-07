@@ -22,6 +22,7 @@ from copy import deepcopy
 from numpy import array
 import matplotlib.pyplot as plt
 
+
 def run(mpc):
     """
     Gurobi based optimal power flow modelling and solution
@@ -109,14 +110,15 @@ def run(mpc):
     # Begin the iteration,
     Gap = 1000
     Gap_index = []
-    Dual_gap_index=[]
+    Dual_gap_index = []
+    Obj_index = []
     k = 0
     kmax = 10000
-    ru = 1000
+    ru = 700
     # The iteration
-    mu = 10
+    mu = 5
     t = 2
-    while k <= kmax and Gap > 0.001:
+    while k <= kmax and Gap > 0.0001 * 2:
         observatory0 = deepcopy(observatory)
         area0 = deepcopy(area)
         for i in range(nb):
@@ -140,37 +142,37 @@ def run(mpc):
         # Calculate the gap
         gap = 0
         for i in range(nb):
-            gap += (area[i]["pi"] - area[i]["pi_y"])**2
-            gap += (area[i]["qi"] - area[i]["qi_y"])**2
+            gap += (area[i]["pi"] - area[i]["pi_y"]) ** 2
+            gap += (area[i]["qi"] - area[i]["qi_y"]) ** 2
             if area[i]["TYPE"] != "ROOT":
-                gap += (area[i]["Vi"] - area[i]["Vi_y"])**2
-                gap += (area[i]["Ii"] - area[i]["Ii_y"])**2
-                gap += (area[i]["Pi"] - area[i]["Pi_y"])**2
-                gap += (area[i]["Qi"] - area[i]["Qi_y"])**2
+                gap += (area[i]["Vi"] - area[i]["Vi_y"]) ** 2
+                gap += (area[i]["Ii"] - area[i]["Ii_y"]) ** 2
+                gap += (area[i]["Pi"] - area[i]["Pi_y"]) ** 2
+                gap += (area[i]["Qi"] - area[i]["Qi_y"]) ** 2
         for i in range(nl):
-            gap += (observatory[i]["Vij_x"] - observatory[i]["Vij_y"])**2
-            gap += (observatory[i]["Pij_x"] - observatory[i]["Pij_y"])**2
-            gap += (observatory[i]["Qij_x"] - observatory[i]["Qij_y"])**2
-            gap += (observatory[i]["Iij_x"] - observatory[i]["Iij_y"])**2
+            gap += (observatory[i]["Vij_x"] - observatory[i]["Vij_y"]) ** 2
+            gap += (observatory[i]["Pij_x"] - observatory[i]["Pij_y"]) ** 2
+            gap += (observatory[i]["Qij_x"] - observatory[i]["Qij_y"]) ** 2
+            gap += (observatory[i]["Iij_x"] - observatory[i]["Iij_y"]) ** 2
 
         dual_gap = 0
         for i in range(nb):
-            dual_gap += (area0[i]["pi_y"] - area[i]["pi_y"])**2
-            dual_gap += (area0[i]["qi_y"] - area[i]["qi_y"])**2
+            dual_gap += (area0[i]["pi_y"] - area[i]["pi_y"]) ** 2
+            dual_gap += (area0[i]["qi_y"] - area[i]["qi_y"]) ** 2
             if area[i]["TYPE"] != "ROOT":
-                dual_gap += (area0[i]["Vi_y"] - area[i]["Vi_y"])**2
-                dual_gap += (area0[i]["Ii_y"] - area[i]["Ii_y"])**2
-                dual_gap += (area0[i]["Pi_y"] - area[i]["Pi_y"])**2
-                dual_gap += (area0[i]["Qi_y"] - area[i]["Qi_y"])**2
+                dual_gap += (area0[i]["Vi_y"] - area[i]["Vi_y"]) ** 2
+                dual_gap += (area0[i]["Ii_y"] - area[i]["Ii_y"]) ** 2
+                dual_gap += (area0[i]["Pi_y"] - area[i]["Pi_y"]) ** 2
+                dual_gap += (area0[i]["Qi_y"] - area[i]["Qi_y"]) ** 2
         for i in range(nl):
-            dual_gap += (observatory0[i]["Vij_y"] - observatory[i]["Vij_y"])**2
-            dual_gap += (observatory0[i]["Pij_y"] - observatory[i]["Pij_y"])**2
-            dual_gap += (observatory0[i]["Qij_y"] - observatory[i]["Qij_y"])**2
-            dual_gap += (observatory0[i]["Iij_y"] - observatory[i]["Iij_y"])**2
+            dual_gap += (observatory0[i]["Vij_y"] - observatory[i]["Vij_y"]) ** 2
+            dual_gap += (observatory0[i]["Pij_y"] - observatory[i]["Pij_y"]) ** 2
+            dual_gap += (observatory0[i]["Qij_y"] - observatory[i]["Qij_y"]) ** 2
+            dual_gap += (observatory0[i]["Iij_y"] - observatory[i]["Iij_y"]) ** 2
 
-        # if dual_gap * mu > gap:
+        # if dual_gap * mu < gap:
         #     ru = ru * t
-        # if gap * mu > dual_gap:
+        # if gap * mu < dual_gap:
         #     ru = ru / t
 
         Gap = sqrt(gap)
@@ -182,14 +184,14 @@ def run(mpc):
         k = k + 1
         print(k)
         print(Gap)
-        # print(obj)
+        print(obj)
         print(sqrt(dual_gap))
     # compute the objective function
     obj = 0
     for i in range(nb):
         obj += area[i]["COST"]
-    Gap_index=array(Gap_index)
-    Dual_gap_index=array(Dual_gap_index)
+    Gap_index = array(Gap_index)
+    Dual_gap_index = array(Dual_gap_index)
     plt.figure(1)
     plt.subplot(211)
     plt.plot(Gap_index)
