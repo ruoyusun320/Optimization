@@ -323,8 +323,10 @@ def run(mpc):
         print(Gap)
         print(obj)
     obj = 0
-    primal_residual = []
+    for i in range(nb):
+        obj += area[i]["a"] * Pg0[i] * Pg0[i] + area[i]["b"] * Pg0[i] + area[i]["c"]
 
+    primal_residual = []
     for i in range(nb):
         primal_residual.append(Pi_x0[i] * Pi_x0[i] + Qi_x0[i] * Qi_x0[i] - Ii_x0[i] * Vi_x0[i])
 
