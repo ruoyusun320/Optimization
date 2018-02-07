@@ -1,10 +1,12 @@
 """
 ADMM based distributed optimal power flow
 The power flow modelling is based on the branch power flow
+Notes：
+1） The concept of observatory has been introduced and verified
+2) Based on multi-block ADMM
+3) Convergence verified
+4) Simulation gap found! (related to the parameter of ru)
 
-References:
-    [1]Peng, Qiuyu, and Steven H. Low. "Distributed optimal power flow algorithm for radial networks, I: Balanced single phase case." IEEE Transactions on Smart Grid (2016).
-    The full model can be applied, with the implement of Algorithm 2.
 """
 
 from Two_stage_stochastic_optimization.power_flow_modelling import case33
