@@ -6,8 +6,8 @@ a) Optimal power flow.
 b) Economic dispatch.
 c) Unit commitment.
 d) Chance constrained programming.
-e) Twp-stage stochastic programming.
-f) Two-stage chance constrainted programming.
+e) Two-stage stochastic programming.
+f) Two-stage chance constrained programming.
 g) Conic programming.
 h) Online optimization.
 More models will added in the further.
