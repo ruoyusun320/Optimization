@@ -50,4 +50,5 @@ def benders_decompostion(c, A, b, Aeq, beq, lb, ub, q_s, W_s, h_s, T_s, Itermax,
     nx = len(c)
     ny = len(q_s)
     ns = W_s.size(0)
+    # 2）
 
