@@ -103,12 +103,12 @@ def problem_formulation(N, delta, weight_factor):
     PV_PG_second_stage = interpolate.splev(Time_second_stage, PV_PG_tck, der=0)
 
     # Check the result
-    pyplot.plot(Time_first_stage, AC_PD, 'x', Time_second_stage, AC_PD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, DC_PD, 'x', Time_second_stage, DC_PD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, HD, 'x', Time_second_stage, HD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, CD, 'x', Time_second_stage, CD_second_stage, 'b')
-    pyplot.plot(Time_first_stage, PV_PG, 'x', Time_second_stage, PV_PG_second_stage, 'b')
-    pyplot.show()
+    # pyplot.plot(Time_first_stage, AC_PD, 'x', Time_second_stage, AC_PD_second_stage, 'b')
+    # pyplot.plot(Time_first_stage, DC_PD, 'x', Time_second_stage, DC_PD_second_stage, 'b')
+    # pyplot.plot(Time_first_stage, HD, 'x', Time_second_stage, HD_second_stage, 'b')
+    # pyplot.plot(Time_first_stage, CD, 'x', Time_second_stage, CD_second_stage, 'b')
+    # pyplot.plot(Time_first_stage, PV_PG, 'x', Time_second_stage, PV_PG_second_stage, 'b')
+    # pyplot.show()
 
     # Generate profiles for each scenarion in the second stage
     AC_PD_scenario = zeros(shape=(N, T_second_stage))
@@ -160,7 +160,6 @@ def problem_formulation(N, delta, weight_factor):
         else:
             model.addConstr(Eess[i] - Eess[i - 1] == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
     # 2) second stage optimisation
-    
 
     # set the objective function
     model.setObjective(obj)
@@ -202,10 +201,26 @@ def problem_formulation(N, delta, weight_factor):
               "Pess_ch": pess_ch,
               "obj": obj
               }
+    from energy_hub.problem_formualtion import ProblemFormulation
+    from solvers.mixed_integer_solvers_gurobi import mixed_integer_linear_programming as milp
+
+    test_model = ProblemFormulation()
+    test_model = test_model.first_stage_problem(PHVDC_max, eff_HVDC, Pess_ch_max, Pess_dc_max, eff_dc, eff_ch, E0, Emax,
+                                                Emin, BIC_cap, Gmax, eff_BIC, eff_CHP_e, eff_CHP_h, AC_PD, DC_PD, HD,
+                                                CD, PV_PG, Gas_price, Electric_price, Eess_cost, Delta_first_stage, T_first_stage)
+    c = test_model["c"]
+    A = test_model["A"]
+    b = test_model["b"]
+    Aeq = test_model["Aeq"]
+    beq = test_model["beq"]
+    lb = test_model["lb"]
+    ub = test_model["ub"]
+    vtypes = ["c"] * len(lb)
+    (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub,vtypes=vtypes)
+    gap = obj/result["obj"]
     return result  # Formulated mixed integer linear programming problem
 
 
 if __name__ == "__main__":
-
     model = problem_formulation(50, 0.03, 0)
     print(model)
