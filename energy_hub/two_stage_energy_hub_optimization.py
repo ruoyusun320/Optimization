@@ -159,7 +159,6 @@ def problem_formulation(N, delta, weight_factor):
             model.addConstr(Eess[i] - E0 == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
         else:
             model.addConstr(Eess[i] - Eess[i - 1] == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
-
     # 2) second stage optimisation
     
 
