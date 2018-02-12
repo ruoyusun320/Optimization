@@ -3,6 +3,8 @@ Two stage stochastic optimization problem for the hybrid AC/DC microgrid embedde
 @author: Tianyang Zhao
 @mail: zhaoty@ntu.edu.sg
 @date:27 Jan 2018
+Note:
+This function can also be used as a test function to evaluate the value of information
 """
 from numpy import array, arange, zeros, inf
 from matplotlib import pyplot
@@ -368,5 +370,5 @@ def problem_formulation(N, delta, weight_factor):
 
 
 if __name__ == "__main__":
-    model = problem_formulation(2000, 0.2, 0)
+    model = problem_formulation(100, 0.05, 0.01)
     print(model)
