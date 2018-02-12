@@ -4,7 +4,7 @@ Two stage stochastic optimization problem for the hybrid AC/DC microgrid embedde
 @mail: zhaoty@ntu.edu.sg
 @date:27 Jan 2018
 """
-from numpy import array, arange, zeros
+from numpy import array, arange, zeros, inf
 from matplotlib import pyplot
 from scipy import interpolate
 from random import random
@@ -135,7 +135,6 @@ def problem_formulation(N, delta, weight_factor):
             HD_scenario[i, j] = HD_second_stage[j] * (1 - delta + 2 * delta * random())
             CD_scenario[i, j] = CD_second_stage[j] * (1 - delta + 2 * delta * random())
             PV_PG_scenario[i, j] = PV_PG_second_stage[j] * (1 - delta + 2 * delta * random())
-
     # Formulation of the two-stage optimization problem
     # 1) First stage optimization problems
     model = Model("EnergyHub")
@@ -166,6 +165,11 @@ def problem_formulation(N, delta, weight_factor):
     eess = {}
     pess_dc = {}
     pess_ch = {}
+    ph_positive_derivation = {}
+    ph_negative_derivation = {}
+    pc_positive_derivation = {}
+    pc_negative_derivation = {}
+
     for j in range(N):
         for i in range(T_second_stage):
             pug[i + j * T_second_stage] = model.addVar(lb=0, vtype=GRB.CONTINUOUS,
@@ -184,11 +188,24 @@ def problem_formulation(N, delta, weight_factor):
                                                            name="pess_dc{0}".format(i + j * T_second_stage))
             pess_ch[i + j * T_second_stage] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS,
                                                            name="pess_ch{0}".format(i + j * T_second_stage))
+            # Auxiliary variables
+            ph_positive_derivation[i + j * T_second_stage] = model.addVar(lb=0, ub=inf, vtype=GRB.CONTINUOUS,
+                                                                          name="ph_positive_derivation{0}".format(
+                                                                              i + j * T_second_stage))
+            ph_negative_derivation[i + j * T_second_stage] = model.addVar(lb=0, ub=inf, vtype=GRB.CONTINUOUS,
+                                                                          name="ph_negative_derivation{0}".format(
+                                                                              i + j * T_second_stage))
+            pc_positive_derivation[i + j * T_second_stage] = model.addVar(lb=0, ub=inf, vtype=GRB.CONTINUOUS,
+                                                                          name="pc_positive_derivation{0}".format(
+                                                                              i + j * T_second_stage))
+            pc_negative_derivation[i + j * T_second_stage] = model.addVar(lb=0, ub=inf, vtype=GRB.CONTINUOUS,
+                                                                          name="pc_negative_derivation{0}".format(
+                                                                              i + j * T_second_stage))
 
     obj_first_stage = 0
     for i in range(T_first_stage):
         obj_first_stage += (G[i] * Gas_price + Electric_price[i] * Pug[i] + Eess_cost * (
-                    Pess_ch[i] + Pess_dc[i])) * Delta_first_stage
+                Pess_ch[i] + Pess_dc[i])) * Delta_first_stage
 
     obj_second_stage = 0
     for j in range(N):
@@ -228,6 +245,11 @@ def problem_formulation(N, delta, weight_factor):
                     i + j * T_second_stage] * Delta_second_stage * eff_ch - pess_dc[
                                     i + j * T_second_stage] * Delta_second_stage / eff_dc)
             # The correlationship between the first and second stage optimization problem
+    # Coupling constraints
+    for j in range(N):
+        for i in range(T_first_stage):
+            model.addConstr(eess[int(i / Delta_second_stage) + j * T_second_stage] == Eess[i])
+            # model.addConstr()
 
     # set the objective function
     obj = ws * obj_first_stage + (1 - ws) * obj_second_stage
