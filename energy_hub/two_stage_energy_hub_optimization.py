@@ -214,7 +214,10 @@ def problem_formulation(N, delta, weight_factor):
                                  pug[
                                      i + j * T_second_stage] + Eess_cost * (
                                          pess_ch[i + j * T_second_stage] + pess_dc[
-                                     i + j * T_second_stage])) * Delta_second_stage
+                                     i + j * T_second_stage]) + ph_negative_derivation[i + j * T_second_stage] +
+                                 ph_positive_derivation[i + j * T_second_stage] + pc_negative_derivation[
+                                     i + j * T_second_stage] + pc_positive_derivation[
+                                     i + j * T_second_stage]) * Delta_second_stage
 
     for i in range(T_first_stage):
         model.addConstr(G[i] * eff_CHP_h == HD[i])
@@ -228,8 +231,8 @@ def problem_formulation(N, delta, weight_factor):
 
     for j in range(N):
         for i in range(T_second_stage):
-            model.addConstr(g[i + j * T_second_stage] * eff_CHP_h == HD_scenario[j, i])
-            model.addConstr(pHVAC[i + j * T_second_stage] * eff_HVDC == CD_scenario[j, i])
+            # model.addConstr(g[i + j * T_second_stage] * eff_CHP_h == HD_scenario[j, i])
+            # model.addConstr(pHVAC[i + j * T_second_stage] * eff_HVDC == CD_scenario[j, i])
             model.addConstr(pug[i + j * T_second_stage] + g[i + j * T_second_stage] * eff_CHP_e + eff_BIC * pDC2AC[
                 i + j * T_second_stage] == AC_PD_scenario[j, i] + pAC2DC[i + j * T_second_stage])
             model.addConstr(pess_dc[i + j * T_second_stage] - pess_ch[i + j * T_second_stage] + eff_BIC * pAC2DC[
@@ -250,6 +253,23 @@ def problem_formulation(N, delta, weight_factor):
         for i in range(T_first_stage):
             model.addConstr(eess[int(i / Delta_second_stage) + j * T_second_stage] == Eess[i])
             # model.addConstr()
+    for j in range(N):
+        for i in range(T_first_stage):
+            model.addConstr((g[4 * i + j * T_second_stage] + g[4 * i + 1 + j * T_second_stage] + g[
+                4 * i + 2 + j * T_second_stage] + g[4 * i + 3 + j * T_second_stage]) * eff_CHP_h == HD[i])
+            model.addConstr((pHVAC[4 * i + j * T_second_stage] + pHVAC[4 * i + 1 + j * T_second_stage] + pHVAC[
+                4 * i + 2 + j * T_second_stage] + pHVAC[4 * i + 3 + j * T_second_stage]) * eff_HVDC == CD[i])
+
+    for j in range(N):
+        for i in range(T_second_stage):
+            model.addConstr(
+                ph_positive_derivation[i + j * T_second_stage] >= g[i] * eff_CHP_h - HD[int(i * Delta_second_stage)])
+            model.addConstr(
+                ph_negative_derivation[i + j * T_second_stage] <= HD[int(i * Delta_second_stage)] - g[i] * eff_CHP_h)
+            model.addConstr(
+                pc_positive_derivation[i + j * T_second_stage] >= pHVAC[i] * eff_HVDC - CD[int(i * Delta_second_stage)])
+            model.addConstr(
+                pc_negative_derivation[i + j * T_second_stage] <= CD[int(i * Delta_second_stage)] - pHVAC[i] * eff_HVDC)
 
     # set the objective function
     obj = ws * obj_first_stage + (1 - ws) * obj_second_stage
@@ -261,35 +281,69 @@ def problem_formulation(N, delta, weight_factor):
     model.Params.LogFile = ""
     model.optimize()
 
-    pug = []
-    g = []
-    pAC2DC = []
-    pDC2AC = []
-    pHVAC = []
-    eess = []
-    pess_dc = []
-    pess_ch = []
+    Pug_x = zeros((T_first_stage, 1))
+    G_x = zeros((T_first_stage, 1))
+    PAC2DC_x = zeros((T_first_stage, 1))
+    PDC2AC_x = zeros((T_first_stage, 1))
+    PHVAC_x = zeros((T_first_stage, 1))
+    Eess_x = zeros((T_first_stage, 1))
+    Pess_dc_x = zeros((T_first_stage, 1))
+    Pess_ch_x = zeros((T_first_stage, 1))
+
+    pug_x = zeros((T_second_stage, N))
+    g_x = zeros((T_second_stage, N))
+    pAC2DC_x = zeros((T_second_stage, N))
+    pDC2AC_x = zeros((T_second_stage, N))
+    pHVAC_x = zeros((T_second_stage, N))
+    eess_x = zeros((T_second_stage, N))
+    pess_dc_x = zeros((T_second_stage, N))
+    pess_ch_x = zeros((T_second_stage, N))
+
+    ph_positive_derivation_x = zeros((T_second_stage, N))
+    ph_negative_derivation_x = zeros((T_second_stage, N))
+    pc_positive_derivation_x = zeros((T_second_stage, N))
+    pc_negative_derivation_x = zeros((T_second_stage, N))
 
     for i in range(T_first_stage):
-        pug.append(model.getVarByName("Pug{0}".format(i)).X)
-        g.append(model.getVarByName("G{0}".format(i)).X)
-        pAC2DC.append(model.getVarByName("A2D{0}".format(i)).X)
-        pDC2AC.append(model.getVarByName("D2A{0}".format(i)).X)
-        pHVAC.append(model.getVarByName("PHVAC{0}".format(i)).X)
-        eess.append(model.getVarByName("Eess{0}".format(i)).X)
-        pess_dc.append(model.getVarByName("Pess_dc{0}".format(i)).X)
-        pess_ch.append(model.getVarByName("Pess_ch{0}".format(i)).X)
+        Pug_x[i] = model.getVarByName("Pug{0}".format(i)).X
+        G_x[i] = model.getVarByName("G{0}".format(i)).X
+        PAC2DC_x[i] = model.getVarByName("A2D{0}".format(i)).X
+        PDC2AC_x[i] = model.getVarByName("D2A{0}".format(i)).X
+        PHVAC_x[i] = model.getVarByName("PHVAC{0}".format(i)).X
+        Eess_x[i] = model.getVarByName("Eess{0}".format(i)).X
+        Pess_dc_x[i] = model.getVarByName("Pess_dc{0}".format(i)).X
+        Pess_ch_x[i] = model.getVarByName("Pess_ch{0}".format(i)).X
+
+    for j in range(N):
+        for i in range(T_second_stage):
+            pug_x[i, j] = model.getVarByName("pug{0}".format(i + j * T_second_stage)).X
+            g_x[i, j] = model.getVarByName("g{0}".format(i + j * T_second_stage)).X
+            pAC2DC_x[i, j] = model.getVarByName("a2d{0}".format(i + j * T_second_stage)).X
+            pDC2AC_x[i, j] = model.getVarByName("d2a{0}".format(i + j * T_second_stage)).X
+            pHVAC_x[i, j] = model.getVarByName("pHVAC{0}".format(i + j * T_second_stage)).X
+            eess_x[i, j] = model.getVarByName("eess{0}".format(i + j * T_second_stage)).X
+            pess_dc_x[i, j] = model.getVarByName("pess_dc{0}".format(i + j * T_second_stage)).X
+            pess_ch_x[i, j] = model.getVarByName("pess_ch{0}".format(i + j * T_second_stage)).X
+
+            ph_positive_derivation_x[i, j] = model.getVarByName(
+                "ph_positive_derivation{0}".format(i + j * T_second_stage)).X
+            ph_negative_derivation_x[i, j] = model.getVarByName(
+                "ph_negative_derivation{0}".format(i + j * T_second_stage)).X
+            pc_positive_derivation_x[i, j] = model.getVarByName(
+                "pc_positive_derivation{0}".format(i + j * T_second_stage)).X
+            pc_negative_derivation_x[i, j] = model.getVarByName(
+                "pc_negative_derivation{0}".format(i + j * T_second_stage)).X
 
     obj = obj.getValue()
 
-    result = {"PUG": pug,
-              "G": g,
-              "PAC2DC": pAC2DC,
-              "PDC2AC": pDC2AC,
-              "PHVAC": pHVAC,
-              "Eess": eess,
-              "Pess_dc": pess_dc,
-              "Pess_ch": pess_ch,
+    result = {"PUG": Pug_x,
+              "G": G_x,
+              "PAC2DC": PAC2DC_x,
+              "PDC2AC": PDC2AC_x,
+              "PHVAC": PHVAC_x,
+              "Eess": Eess_x,
+              "Pess_dc": Pess_dc_x,
+              "Pess_ch": Pess_ch_x,
               "obj": obj
               }
 
