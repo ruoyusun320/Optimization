@@ -46,6 +46,7 @@ def problem_formulation(N, delta, weight_factor):
     Delta_second_stage = 0.25
     T_first_stage = 24
     T_second_stage = int(T_first_stage / Delta_second_stage)
+    ws = 0.5
     # AC electrical demand
     AC_PD = array([323.0284, 308.2374, 318.1886, 307.9809, 331.2170, 368.6539, 702.0040, 577.7045, 1180.4547, 1227.6240,
                    1282.9344, 1311.9738, 1268.9502, 1321.7436, 1323.9218, 1327.1464, 1386.9117, 1321.6387, 1132.0476,
@@ -101,7 +102,17 @@ def problem_formulation(N, delta, weight_factor):
     HD_second_stage = interpolate.splev(Time_second_stage, HD_tck, der=0)
     CD_second_stage = interpolate.splev(Time_second_stage, CD_tck, der=0)
     PV_PG_second_stage = interpolate.splev(Time_second_stage, PV_PG_tck, der=0)
-
+    for i in range(T_second_stage):
+        if AC_PD_second_stage[i] < 0:
+            AC_PD_second_stage[i] = 0
+        if DC_PD_second_stage[i] < 0:
+            DC_PD_second_stage[i] = 0
+        if HD_second_stage[i] < 0:
+            HD_second_stage[i] = 0
+        if CD_second_stage[i] < 0:
+            CD_second_stage[i] = 0
+        if PV_PG_second_stage[i] < 0:
+            PV_PG_second_stage[i] = 0
     # Check the result
     # pyplot.plot(Time_first_stage, AC_PD, 'x', Time_second_stage, AC_PD_second_stage, 'b')
     # pyplot.plot(Time_first_stage, DC_PD, 'x', Time_second_stage, DC_PD_second_stage, 'b')
@@ -145,10 +156,48 @@ def problem_formulation(N, delta, weight_factor):
         Eess[i] = model.addVar(lb=Emin, ub=Emax, vtype=GRB.CONTINUOUS, name="Eess{0}".format(i))
         Pess_dc[i] = model.addVar(lb=0, ub=Pess_dc_max, vtype=GRB.CONTINUOUS, name="Pess_dc{0}".format(i))
         Pess_ch[i] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS, name="Pess_ch{0}".format(i))
+    # 2) second stage optimisation
+    # This serves as the test system for the test system
+    pug = {}
+    g = {}
+    pAC2DC = {}
+    pDC2AC = {}
+    pHVAC = {}
+    eess = {}
+    pess_dc = {}
+    pess_ch = {}
+    for j in range(N):
+        for i in range(T_second_stage):
+            pug[i + j * T_second_stage] = model.addVar(lb=0, vtype=GRB.CONTINUOUS,
+                                                       name="pug{0}".format(i + j * T_second_stage))
+            g[i + j * T_second_stage] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS,
+                                                     name="g{0}".format(i + j * T_second_stage))
+            pAC2DC[i + j * T_second_stage] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS,
+                                                          name="a2d{0}".format(i + j * T_second_stage))
+            pDC2AC[i + j * T_second_stage] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS,
+                                                          name="d2a{0}".format(i + j * T_second_stage))
+            pHVAC[i + j * T_second_stage] = model.addVar(lb=0, ub=PHVDC_max, vtype=GRB.CONTINUOUS,
+                                                         name="pHVAC{0}".format(i + j * T_second_stage))
+            eess[i + j * T_second_stage] = model.addVar(lb=Emin, ub=Emax, vtype=GRB.CONTINUOUS,
+                                                        name="eess{0}".format(i + j * T_second_stage))
+            pess_dc[i + j * T_second_stage] = model.addVar(lb=0, ub=Pess_dc_max, vtype=GRB.CONTINUOUS,
+                                                           name="pess_dc{0}".format(i + j * T_second_stage))
+            pess_ch[i + j * T_second_stage] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS,
+                                                           name="pess_ch{0}".format(i + j * T_second_stage))
 
-    obj = 0
+    obj_first_stage = 0
     for i in range(T_first_stage):
-        obj = obj + G[i] * Gas_price + Electric_price[i] * Pug[i] + Eess_cost * (Pess_ch[i] + Pess_dc[i])
+        obj_first_stage += (G[i] * Gas_price + Electric_price[i] * Pug[i] + Eess_cost * (
+                    Pess_ch[i] + Pess_dc[i])) * Delta_first_stage
+
+    obj_second_stage = 0
+    for j in range(N):
+        for i in range(T_second_stage):
+            obj_second_stage += (g[i + j * T_second_stage] * Gas_price + Electric_price[int(i * Delta_second_stage)] * \
+                                 pug[
+                                     i + j * T_second_stage] + Eess_cost * (
+                                         pess_ch[i + j * T_second_stage] + pess_dc[
+                                     i + j * T_second_stage])) * Delta_second_stage
 
     for i in range(T_first_stage):
         model.addConstr(G[i] * eff_CHP_h == HD[i])
@@ -159,13 +208,33 @@ def problem_formulation(N, delta, weight_factor):
             model.addConstr(Eess[i] - E0 == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
         else:
             model.addConstr(Eess[i] - Eess[i - 1] == Pess_ch[i] * eff_ch - Pess_dc[i] / eff_dc)
-    # 2) second stage optimisation
+
+    for j in range(N):
+        for i in range(T_second_stage):
+            model.addConstr(g[i + j * T_second_stage] * eff_CHP_h == HD_scenario[j, i])
+            model.addConstr(pHVAC[i + j * T_second_stage] * eff_HVDC == CD_scenario[j, i])
+            model.addConstr(pug[i + j * T_second_stage] + g[i + j * T_second_stage] * eff_CHP_e + eff_BIC * pDC2AC[
+                i + j * T_second_stage] == AC_PD_scenario[j, i] + pAC2DC[i + j * T_second_stage])
+            model.addConstr(pess_dc[i + j * T_second_stage] - pess_ch[i + j * T_second_stage] + eff_BIC * pAC2DC[
+                i + j * T_second_stage] + PV_PG_scenario[j, i] == DC_PD_scenario[j, i] + pDC2AC[
+                                i + j * T_second_stage])
+            if i == 0:
+                model.addConstr(
+                    eess[i + j * T_second_stage] - E0 == pess_ch[i + j * T_second_stage] * eff_ch * Delta_second_stage -
+                    pess_dc[
+                        i + j * T_second_stage] * Delta_second_stage / eff_dc)
+            else:
+                model.addConstr(eess[i + j * T_second_stage] - eess[i + j * T_second_stage - 1] == pess_ch[
+                    i + j * T_second_stage] * Delta_second_stage * eff_ch - pess_dc[
+                                    i + j * T_second_stage] * Delta_second_stage / eff_dc)
+            # The correlationship between the first and second stage optimization problem
 
     # set the objective function
+    obj = ws * obj_first_stage + (1 - ws) * obj_second_stage
     model.setObjective(obj)
 
-    model.Params.OutputFlag = 0
-    model.Params.LogToConsole = 0
+    model.Params.OutputFlag = 1
+    model.Params.LogToConsole = 1
     model.Params.DisplayInterval = 1
     model.Params.LogFile = ""
     model.optimize()
@@ -201,23 +270,24 @@ def problem_formulation(N, delta, weight_factor):
               "Pess_ch": pess_ch,
               "obj": obj
               }
-    from energy_hub.problem_formualtion import ProblemFormulation
-    from solvers.mixed_integer_solvers_gurobi import mixed_integer_linear_programming as milp
 
-    test_model = ProblemFormulation()
-    test_model = test_model.first_stage_problem(PHVDC_max, eff_HVDC, Pess_ch_max, Pess_dc_max, eff_dc, eff_ch, E0, Emax,
-                                                Emin, BIC_cap, Gmax, eff_BIC, eff_CHP_e, eff_CHP_h, AC_PD, DC_PD, HD,
-                                                CD, PV_PG, Gas_price, Electric_price, Eess_cost, Delta_first_stage, T_first_stage)
-    c = test_model["c"]
-    A = test_model["A"]
-    b = test_model["b"]
-    Aeq = test_model["Aeq"]
-    beq = test_model["beq"]
-    lb = test_model["lb"]
-    ub = test_model["ub"]
-    vtypes = ["c"] * len(lb)
-    (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub,vtypes=vtypes)
-    gap = obj/result["obj"]
+    # from energy_hub.problem_formualtion import ProblemFormulation
+    # from solvers.mixed_integer_solvers_gurobi import mixed_integer_linear_programming as milp
+
+    # test_model = ProblemFormulation()
+    # test_model = test_model.first_stage_problem(PHVDC_max, eff_HVDC, Pess_ch_max, Pess_dc_max, eff_dc, eff_ch, E0, Emax,
+    #                                             Emin, BIC_cap, Gmax, eff_BIC, eff_CHP_e, eff_CHP_h, AC_PD, DC_PD, HD,
+    #                                             CD, PV_PG, Gas_price, Electric_price, Eess_cost, Delta_first_stage, T_first_stage)
+    # c = test_model["c"]
+    # A = test_model["A"]
+    # b = test_model["b"]
+    # Aeq = test_model["Aeq"]
+    # beq = test_model["beq"]
+    # lb = test_model["lb"]
+    # ub = test_model["ub"]
+    # vtypes = ["c"] * len(lb)
+    # (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub,vtypes=vtypes)
+    # gap = obj/result["obj"]
     return result  # Formulated mixed integer linear programming problem
 
 
