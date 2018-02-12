@@ -211,13 +211,12 @@ def problem_formulation(N, delta, weight_factor):
     for j in range(N):
         for i in range(T_second_stage):
             obj_second_stage += (g[i + j * T_second_stage] * Gas_price + Electric_price[int(i * Delta_second_stage)] * \
-                                 pug[
-                                     i + j * T_second_stage] + Eess_cost * (
-                                         pess_ch[i + j * T_second_stage] + pess_dc[
-                                     i + j * T_second_stage]) + ph_negative_derivation[i + j * T_second_stage] +
-                                 ph_positive_derivation[i + j * T_second_stage] + pc_negative_derivation[
-                                     i + j * T_second_stage] + pc_positive_derivation[
-                                     i + j * T_second_stage]) * Delta_second_stage
+                                 pug[i + j * T_second_stage] + \
+                                 Eess_cost * (pess_ch[i + j * T_second_stage] + pess_dc[i + j * T_second_stage]) + \
+                                 ph_negative_derivation[i + j * T_second_stage] * weight_factor + \
+                                 ph_positive_derivation[i + j * T_second_stage] * weight_factor + \
+                                 pc_negative_derivation[i + j * T_second_stage] * weight_factor + \
+                                 pc_positive_derivation[i + j * T_second_stage] * weight_factor) * Delta_second_stage
 
     for i in range(T_first_stage):
         model.addConstr(G[i] * eff_CHP_h == HD[i])
@@ -252,27 +251,28 @@ def problem_formulation(N, delta, weight_factor):
     for j in range(N):
         for i in range(T_first_stage):
             model.addConstr(eess[int(i / Delta_second_stage) + j * T_second_stage] == Eess[i])
-            # model.addConstr()
     for j in range(N):
         for i in range(T_first_stage):
             model.addConstr((g[4 * i + j * T_second_stage] + g[4 * i + 1 + j * T_second_stage] + g[
-                4 * i + 2 + j * T_second_stage] + g[4 * i + 3 + j * T_second_stage]) * eff_CHP_h == HD[i])
+                4 * i + 2 + j * T_second_stage] + g[4 * i + 3 + j * T_second_stage]) * eff_CHP_h * Delta_second_stage ==
+                            HD[i])
             model.addConstr((pHVAC[4 * i + j * T_second_stage] + pHVAC[4 * i + 1 + j * T_second_stage] + pHVAC[
-                4 * i + 2 + j * T_second_stage] + pHVAC[4 * i + 3 + j * T_second_stage]) * eff_HVDC == CD[i])
+                4 * i + 2 + j * T_second_stage] + pHVAC[
+                                 4 * i + 3 + j * T_second_stage]) * eff_HVDC * Delta_second_stage == CD[i])
 
     for j in range(N):
         for i in range(T_second_stage):
             model.addConstr(
                 ph_positive_derivation[i + j * T_second_stage] >= g[i] * eff_CHP_h - HD[int(i * Delta_second_stage)])
             model.addConstr(
-                ph_negative_derivation[i + j * T_second_stage] <= HD[int(i * Delta_second_stage)] - g[i] * eff_CHP_h)
+                ph_negative_derivation[i + j * T_second_stage] >= HD[int(i * Delta_second_stage)] - g[i] * eff_CHP_h)
             model.addConstr(
                 pc_positive_derivation[i + j * T_second_stage] >= pHVAC[i] * eff_HVDC - CD[int(i * Delta_second_stage)])
             model.addConstr(
-                pc_negative_derivation[i + j * T_second_stage] <= CD[int(i * Delta_second_stage)] - pHVAC[i] * eff_HVDC)
+                pc_negative_derivation[i + j * T_second_stage] >= CD[int(i * Delta_second_stage)] - pHVAC[i] * eff_HVDC)
 
     # set the objective function
-    obj = ws * obj_first_stage + (1 - ws) * obj_second_stage
+    obj = ws * obj_first_stage + (1 - ws) * obj_second_stage / N
     model.setObjective(obj)
 
     model.Params.OutputFlag = 1
@@ -368,5 +368,5 @@ def problem_formulation(N, delta, weight_factor):
 
 
 if __name__ == "__main__":
-    model = problem_formulation(50, 0.03, 0)
+    model = problem_formulation(2000, 0.2, 0)
     print(model)
