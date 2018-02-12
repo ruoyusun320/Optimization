@@ -146,8 +146,9 @@ class ProblemFormulation():
         return mathematical_model
 
     def second_stage_problem(self, *args):
-        # import data format
-        from energy_hub.data_format import GAS, UG, PAC2DC, PDC2AC, PHVAC, EESS, PESSDC, PESSCH, NX
+        # import data format from the second stage optimization
+        from energy_hub.data_format_second_stage import GAS, UG, PAC2DC, PDC2AC, PHVAC, EESS, PESSDC, PESSCH, \
+            PH_POSITIVE, PH_NEGATIVE, PC_POSITIVE, PC_NEGATIVE, NX
         # Parameter announcement
         PHVAC_max = args[0]
         eff_HVAC = args[1]
@@ -200,31 +201,16 @@ class ProblemFormulation():
             ub[i * NX + PESSCH] = Pess_ch_max
             ub[i * NX + PHVAC] = PHVAC_max
         # The constain set, all equal constraints
+        # 1) AC side power balance equation
         Aeq = zeros((T, NX * T))
         beq = zeros((T, 1))
         for i in range(T):
-            Aeq[i, i * NX + GAS] = eff_CHP_h
-            beq[i] = HD[i]
-
-        Aeq_temp = zeros((T, NX * T))
-        beq_temp = zeros((T, 1))
-        for i in range(T):
-            Aeq_temp[i, i * NX + PHVAC] = eff_HVAC
-            beq_temp[i] = CD[i]
-        Aeq = vstack([Aeq, Aeq_temp])
-        beq = vstack([beq, beq_temp])
-
-        Aeq_temp = zeros((T, NX * T))
-        beq_temp = zeros((T, 1))
-        for i in range(T):
-            Aeq_temp[i, i * NX + UG] = 1
-            Aeq_temp[i, i * NX + GAS] = eff_CHP_e
-            Aeq_temp[i, i * NX + PDC2AC] = eff_BIC
-            Aeq_temp[i, i * NX + PAC2DC] = -1
-            beq_temp[i] = AC_PD[i]
-        Aeq = vstack([Aeq, Aeq_temp])
-        beq = vstack([beq, beq_temp])
-
+            Aeq[i, i * NX + UG] = 1
+            Aeq[i, i * NX + GAS] = eff_CHP_e
+            Aeq[i, i * NX + PDC2AC] = eff_BIC
+            Aeq[i, i * NX + PAC2DC] = -1
+            beq[i] = AC_PD[i]
+        # 2) DC side power balance equation
         Aeq_temp = zeros((T, NX * T))
         beq_temp = zeros((T, 1))
         for i in range(T):
@@ -233,10 +219,34 @@ class ProblemFormulation():
             Aeq_temp[i, i * NX + PAC2DC] = eff_BIC
             Aeq_temp[i, i * NX + PDC2AC] = -1
             beq_temp[i] = DC_PD[i] - PV_PG[i]
-
         Aeq = vstack([Aeq, Aeq_temp])
         beq = vstack([beq, beq_temp])
-
+        # 3) Heat and cooling energy balance equation
+        # 3.1) Heat energy balance
+        N_compress = 4
+        T_compress = int(T / N_compress)
+        Aeq_temp = zeros((T_compress, NX * T))
+        beq_temp = zeros((T_compress, 1))
+        for i in range(T_compress):
+            Aeq_temp[i, i * 4 * NX + GAS] = eff_CHP_h * Delta_t
+            Aeq_temp[i, (i * 4 + 1) * NX + GAS] = eff_CHP_h * Delta_t
+            Aeq_temp[i, (i * 4 + 2) * NX + GAS] = eff_CHP_h * Delta_t
+            Aeq_temp[i, (i * 4 + 3) * NX + GAS] = eff_CHP_h * Delta_t
+            beq_temp[i] = HD[i]
+        Aeq = vstack([Aeq, Aeq_temp])
+        beq = vstack([beq, beq_temp])
+        # 3.2) Cooling energy balance
+        Aeq_temp = zeros((T_compress, NX * T))
+        beq_temp = zeros((T_compress, 1))
+        for i in range(T_compress):
+            Aeq_temp[i, i * 4 * NX + PHVAC] = eff_HVAC * Delta_t
+            Aeq_temp[i, (i * 4 + 1) * NX + PHVAC] = eff_HVAC * Delta_t
+            Aeq_temp[i, (i * 4 + 2) * NX + PHVAC] = eff_HVAC * Delta_t
+            Aeq_temp[i, (i * 4 + 3) * NX + PHVAC] = eff_HVAC * Delta_t
+            beq_temp[i] = HD[i]
+        Aeq = vstack([Aeq, Aeq_temp])
+        beq = vstack([beq, beq_temp])
+        # 4) ESS SOC dynamic equation
         Aeq_temp = zeros((T, NX * T))
         beq_temp = zeros((T, 1))
         for i in range(T):
@@ -269,3 +279,4 @@ class ProblemFormulation():
                               'lb': lb,
                               'ub': ub}
         return mathematical_model
+
