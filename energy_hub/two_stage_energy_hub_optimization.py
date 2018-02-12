@@ -249,10 +249,6 @@ def problem_formulation(N, delta, weight_factor):
                     i + j * T_second_stage] * Delta_second_stage * eff_ch - pess_dc[
                                     i + j * T_second_stage] * Delta_second_stage / eff_dc)
             # The correlationship between the first and second stage optimization problem
-    # Coupling constraints
-    for j in range(N):
-        for i in range(T_first_stage):
-            model.addConstr(eess[int(i / Delta_second_stage) + j * T_second_stage] == Eess[i])
     for j in range(N):
         for i in range(T_first_stage):
             model.addConstr((g[4 * i + j * T_second_stage] + g[4 * i + 1 + j * T_second_stage] + g[
@@ -261,6 +257,11 @@ def problem_formulation(N, delta, weight_factor):
             model.addConstr((pHVAC[4 * i + j * T_second_stage] + pHVAC[4 * i + 1 + j * T_second_stage] + pHVAC[
                 4 * i + 2 + j * T_second_stage] + pHVAC[
                                  4 * i + 3 + j * T_second_stage]) * eff_HVDC * Delta_second_stage == CD[i])
+
+    # Coupling constraints
+    for j in range(N):
+        for i in range(T_first_stage):
+            model.addConstr(eess[int(i / Delta_second_stage) + j * T_second_stage] == Eess[i])
 
     for j in range(N):
         for i in range(T_second_stage):
