@@ -179,6 +179,7 @@ class ProblemFormulation():
 
         Delta_t = args[22]
         T = int(args[23])
+        weight_factor = int(args[24])
         # Formulate the boundary information
         lb = zeros((NX * T, 1))
         ub = zeros((NX * T, 1))
@@ -243,7 +244,7 @@ class ProblemFormulation():
             Aeq_temp[i, (i * 4 + 1) * NX + PHVAC] = eff_HVAC * Delta_t
             Aeq_temp[i, (i * 4 + 2) * NX + PHVAC] = eff_HVAC * Delta_t
             Aeq_temp[i, (i * 4 + 3) * NX + PHVAC] = eff_HVAC * Delta_t
-            beq_temp[i] = HD[i]
+            beq_temp[i] = CD[i]
         Aeq = vstack([Aeq, Aeq_temp])
         beq = vstack([beq, beq_temp])
         # 4) ESS SOC dynamic equation
@@ -270,6 +271,11 @@ class ProblemFormulation():
             c[i * NX + GAS] = Gas_price * Delta_t
             c[i * NX + PESSDC] = Eess_cost * Delta_t
             c[i * NX + PESSCH] = Eess_cost * Delta_t
+            # The relaxation of second stage optimization
+            c[i * NX + PH_POSITIVE] = weight_factor * Delta_t
+            c[i * NX + PH_NEGATIVE] = weight_factor * Delta_t
+            c[i * NX + PC_NEGATIVE] = weight_factor * Delta_t
+            c[i * NX + PC_POSITIVE] = weight_factor * Delta_t
 
         mathematical_model = {'c': c,
                               'Aeq': Aeq,
@@ -279,4 +285,14 @@ class ProblemFormulation():
                               'lb': lb,
                               'ub': ub}
         return mathematical_model
+    def coupling_constraints(self,*args):
+        """
+        The coupling constraints for the first stage optimization problem and second stage problem
+        :param args: The mathematical models of two stage optimization problem
+        :return:
+        """
+        model_first_stage = args[0]
+        model_second_stage = args[1]
+
+
 
