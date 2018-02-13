@@ -148,7 +148,7 @@ class ProblemFormulation():
     def second_stage_problem(self, *args):
         # import data format from the second stage optimization
         from energy_hub.data_format_second_stage import GAS, UG, PAC2DC, PDC2AC, PHVAC, EESS, PESSDC, PESSCH, \
-            PH_POSITIVE, PH_NEGATIVE, PC_POSITIVE, PC_NEGATIVE, NX
+            PH_ABS, PH_RELAX, PC_ABS, PC_RELAX, NX
         # Parameter announcement
         PHVAC_max = args[0]
         eff_HVAC = args[1]
@@ -267,15 +267,13 @@ class ProblemFormulation():
 
         c = zeros((NX * T, 1))
         for i in range(T):
-            c[i * NX + UG] = Electric_price[i] * Delta_t
+            c[i * NX + UG] = Electric_price[int(i * Delta_t)] * Delta_t
             c[i * NX + GAS] = Gas_price * Delta_t
             c[i * NX + PESSDC] = Eess_cost * Delta_t
             c[i * NX + PESSCH] = Eess_cost * Delta_t
             # The relaxation of second stage optimization
-            c[i * NX + PH_POSITIVE] = weight_factor * Delta_t
-            c[i * NX + PH_NEGATIVE] = weight_factor * Delta_t
-            c[i * NX + PC_NEGATIVE] = weight_factor * Delta_t
-            c[i * NX + PC_POSITIVE] = weight_factor * Delta_t
+            c[i * NX + PH_ABS] = weight_factor * Delta_t
+            c[i * NX + PC_ABS] = weight_factor * Delta_t
 
         mathematical_model = {'c': c,
                               'Aeq': Aeq,
@@ -285,7 +283,8 @@ class ProblemFormulation():
                               'lb': lb,
                               'ub': ub}
         return mathematical_model
-    def coupling_constraints(self,*args):
+
+    def coupling_constraints(self, *args):
         """
         The coupling constraints for the first stage optimization problem and second stage problem
         :param args: The mathematical models of two stage optimization problem
@@ -294,5 +293,4 @@ class ProblemFormulation():
         model_first_stage = args[0]
         model_second_stage = args[1]
 
-
-
+        return model_first_stage
