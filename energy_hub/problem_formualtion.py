@@ -282,7 +282,37 @@ class ProblemFormulation():
                               'b': None,
                               'lb': lb,
                               'ub': ub}
-        return mathematical_model
+        # Formulating the standard format problem, removing the upper and lower boundary information to equality constraints.
+        neq = Aeq.shape[0]
+        nx = Aeq.shape[1]
+        Aeq_extended = zeros((neq + 2 * nx, 3 * nx))
+        lb_extended = zeros((3 * nx, 1))
+        ub_extended = inf * ones((3 * nx, 1))
+        beq_extended = vstack([beq, lb, ub])
+        c_extended = vstack([c, zeros((2 * nx, 1))])  # Objective function
+        for i in range(neq):
+            for j in range(nx):
+                Aeq_extended[i, j] = Aeq[i, j]
+
+        for i in range(neq, neq + nx):
+            for j in range(nx):
+                Aeq_extended[i, j] = 1
+                Aeq_extended[i, j + nx] = -1
+
+        for i in range(neq + nx, neq + 2 * nx):
+            for j in range(nx):
+                Aeq_extended[i, j] = 1
+                Aeq_extended[i, j + nx] = 1
+
+        mathematical_model_extended = {'c': c_extended,
+                                       'Aeq': Aeq_extended,
+                                       'beq': beq_extended,
+                                       'A': None,
+                                       'b': None,
+                                       'lb': lb_extended,
+                                       'ub': ub_extended}
+
+        return mathematical_model,mathematical_model_extended
 
     def coupling_constraints(self, *args):
         """
