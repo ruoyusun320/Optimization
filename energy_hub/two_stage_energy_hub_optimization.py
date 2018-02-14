@@ -371,5 +371,5 @@ def problem_formulation(N, delta, weight_factor):
 
 
 if __name__ == "__main__":
-    model = problem_formulation(100, 0.05, 0.01)
+    model = problem_formulation(50, 0.05, 0.01)
     print(model)

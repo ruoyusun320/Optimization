@@ -9,7 +9,7 @@ Two types of problems will be formulated.
 @e-mail: zhaoty@ntu.edu.sg
 @date: 10 Feb 2018
 """
-from numpy import zeros, ones, inf, vstack
+from numpy import zeros, ones, inf, vstack, hstack, eye
 
 
 class ProblemFormulation():
@@ -66,7 +66,7 @@ class ProblemFormulation():
             lb[i * NX + PESSCH] = 0
             lb[i * NX + PHVAC] = 0
 
-            ub[i * NX + UG] = inf
+            ub[i * NX + UG] = Gmax
             ub[i * NX + GAS] = Gmax
             ub[i * NX + PAC2DC] = BIC_cap
             ub[i * NX + PDC2AC] = BIC_cap
@@ -193,7 +193,7 @@ class ProblemFormulation():
             lb[i * NX + PESSCH] = 0
             lb[i * NX + PHVAC] = 0
 
-            ub[i * NX + UG] = inf
+            ub[i * NX + UG] = Gmax
             ub[i * NX + GAS] = Gmax
             ub[i * NX + PAC2DC] = BIC_cap
             ub[i * NX + PDC2AC] = BIC_cap
@@ -265,7 +265,7 @@ class ProblemFormulation():
         Aeq = vstack([Aeq, Aeq_temp])
         beq = vstack([beq, beq_temp])
 
-        c = zeros((NX * T, 1))
+        c = zeros((NX * T,1))
         for i in range(T):
             c[i * NX + UG] = Electric_price[int(i * Delta_t)] * Delta_t
             c[i * NX + GAS] = Gas_price * Delta_t
@@ -285,24 +285,14 @@ class ProblemFormulation():
         # Formulating the standard format problem, removing the upper and lower boundary information to equality constraints.
         neq = Aeq.shape[0]
         nx = Aeq.shape[1]
-        Aeq_extended = zeros((neq + 2 * nx, 3 * nx))
+        # Aeq_extended = zeros((neq + 2 * nx, 3 * nx))
         lb_extended = zeros((3 * nx, 1))
         ub_extended = inf * ones((3 * nx, 1))
         beq_extended = vstack([beq, lb, ub])
-        c_extended = vstack([c, zeros((2 * nx, 1))])  # Objective function
-        for i in range(neq):
-            for j in range(nx):
-                Aeq_extended[i, j] = Aeq[i, j]
-
-        for i in range(neq, neq + nx):
-            for j in range(nx):
-                Aeq_extended[i, j] = 1
-                Aeq_extended[i, j + nx] = -1
-
-        for i in range(neq + nx, neq + 2 * nx):
-            for j in range(nx):
-                Aeq_extended[i, j] = 1
-                Aeq_extended[i, j + nx] = 1
+        c_extended = vstack([c, zeros((2 * nx, 1))])
+        Aeq_extended = hstack([Aeq, zeros((neq, 2 * nx))])
+        Aeq_extended = vstack([Aeq_extended, hstack([eye(nx), -eye(nx), zeros((nx, nx))]),
+                               hstack([eye(nx), zeros((nx, nx)), eye(nx)])])
 
         mathematical_model_extended = {'c': c_extended,
                                        'Aeq': Aeq_extended,
@@ -312,7 +302,7 @@ class ProblemFormulation():
                                        'lb': lb_extended,
                                        'ub': ub_extended}
 
-        return mathematical_model,mathematical_model_extended
+        return mathematical_model, mathematical_model_extended
 
     def coupling_constraints(self, *args):
         """

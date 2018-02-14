@@ -137,24 +137,30 @@ def problem_formulation(N, delta, weight_factor):
                                                                       eff_CHP_h, AC_PD, DC_PD, HD,
                                                                       CD, PV_PG, Gas_price, Electric_price, Eess_cost,
                                                                       Delta_first_stage, T_first_stage)
-    # c = first_stage_model["c"]
-    # A = first_stage_model["A"]
-    # b = first_stage_model["b"]
-    # Aeq = first_stage_model["Aeq"]
-    # beq = first_stage_model["beq"]
-    # lb = first_stage_model["lb"]
-    # ub = first_stage_model["ub"]
-    # vtypes = ["c"] * len(lb)
-    # (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub, vtypes=vtypes)
+    c = first_stage_model["c"]
+    A = first_stage_model["A"]
+    b = first_stage_model["b"]
+    Aeq = first_stage_model["Aeq"]
+    beq = first_stage_model["beq"]
+    lb = first_stage_model["lb"]
+    ub = first_stage_model["ub"]
+    vtypes = ["c"] * len(lb)
+    (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub, vtypes=vtypes)
     # 2.2) The second stage optimization problem
-    second_stage_mode = problem_formulation_model.second_stage_problem(PHVAC_max, eff_HVAC, Pess_ch_max, Pess_dc_max,
-                                                                       eff_dc, eff_ch, E0, Emax,
-                                                                       Emin, BIC_cap, Gmax, eff_BIC, eff_CHP_e,
-                                                                       eff_CHP_h, AC_PD_second_stage,
-                                                                       DC_PD_second_stage, HD,
-                                                                       CD, PV_PG_second_stage, Gas_price,
-                                                                       Electric_price, Eess_cost, Delta_second_stage,
-                                                                       T_second_stage, weight_factor)
+    (second_stage_mode, second_stage_model) = problem_formulation_model.second_stage_problem(PHVAC_max, eff_HVAC,
+                                                                                            Pess_ch_max, Pess_dc_max,
+                                                                                            eff_dc, eff_ch, E0, Emax,
+                                                                                            Emin, BIC_cap, Gmax,
+                                                                                            eff_BIC, eff_CHP_e,
+                                                                                            eff_CHP_h,
+                                                                                            AC_PD_second_stage,
+                                                                                            DC_PD_second_stage, HD,
+                                                                                            CD, PV_PG_second_stage,
+                                                                                            Gas_price,
+                                                                                            Electric_price, Eess_cost,
+                                                                                            Delta_second_stage,
+                                                                                            T_second_stage,
+                                                                                            weight_factor)
     # c = second_stage_mode["c"]
     # A = second_stage_mode["A"]
     # b = second_stage_mode["b"]
@@ -163,13 +169,21 @@ def problem_formulation(N, delta, weight_factor):
     # lb = second_stage_mode["lb"]
     # ub = second_stage_mode["ub"]
     # vtypes = ["c"] * len(lb)
-    # (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub, vtypes=vtypes)
+    c = second_stage_model["c"]
+    A = second_stage_model["A"]
+    b = second_stage_model["b"]
+    Aeq = second_stage_model["Aeq"]
+    beq = second_stage_model["beq"]
+    lb = second_stage_model["lb"]
+    ub = second_stage_model["ub"]
+    vtypes = ["c"] * len(lb)
+    (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub, vtypes=vtypes)
 
     # Step 3: formulate the coupling matrix
     # 3.1) Fixed recourse equation formulation
     # 3.1.1) Energy storage system systems
 
-    T_s = zeros((T_first_stage,len(first_stage_model)))
+    T_s = zeros((T_first_stage, len(first_stage_model)))
     # Step 4: Using the benders iteration
 
     # Step 5: Obtained solution check and analysis
