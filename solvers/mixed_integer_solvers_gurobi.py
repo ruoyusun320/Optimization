@@ -88,34 +88,47 @@ def mixed_integer_linear_programming(c, Aeq=None, beq=None, A=None, b=None, xmin
                 x[i] = gurobi_model.addVar(lb=xmin[i], ub=xmax[i], vtype=GRB.INTEGER, name='"x{0}"'.format(i))
             else:
                 x[i] = gurobi_model.addVar(lb=xmin[i], ub=xmax[i], vtype=GRB.CONTINUOUS, name='"x{0}"'.format(i))
+        # x = gurobi_model.addVars((nx, 1), lb=xmin.tolist(), ub=xmax.tolist())
+
         # Constraints set
         # Equal constraints
+        print(time.time() - t0)
+        gurobi_model.update()
+
         if neq != 0:
             for i in range(neq):
-                expr = 0
+                expr = LinExpr()
                 for j in range(nx):
                     if Aeq[i, j] != 0:
-                        expr += x[j] * Aeq[i, j]
+                        expr.addTerms(Aeq[i, j], x[j])
                 gurobi_model.addConstr(lhs=expr, sense=GRB.EQUAL, rhs=beq[i])
-            # gurobi_model.addConstrs()
+                # gurobi_model.addConstr(beq[i] == quicksum(Aeq[i, j] * x[j] for j in range(nx)))
+                # gurobi_model.addConstr(x.prod(Aeq[i, :]) == beq[i])
+                # print(i)
 
+            # gurobi_model.addConstrs()
+        print(time.time() - t0)
         # Inequal constraints
         if nineq != 0:
             for i in range(nineq):
-                expr = 0
+                expr = LinExpr()
                 for j in range(nx):
                     if A[i, j] != 0:
-                        expr += x[j] * A[i, j]
+                        expr.addTerms(A[i, j], x[j])
                 gurobi_model.addConstr(lhs=expr, sense=GRB.LESS_EQUAL, rhs=b[i])
+                # gurobi_model.addConstr(b[i] >= quicksum(A[i, j] * x[j] for j in range(nx)))
+                # gurobi_model.addConstr(x.prod(A[i, :]) == b[i])
         # Set the objective function
-        obj = 0
+        obj = LinExpr()
         for i in range(nx):
-            obj += x[i] * c[i]
+            if c[i] != 0:
+                obj.addTerms(c[i], x[i])
+        # obj = x.prod(c)
 
         gurobi_model.setObjective(obj)
 
-        gurobi_model.Params.OutputFlag = 1
-        gurobi_model.Params.LogToConsole = 1
+        gurobi_model.Params.OutputFlag = 0
+        gurobi_model.Params.LogToConsole = 0
         gurobi_model.Params.DisplayInterval = 1
         gurobi_model.Params.LogFile = ""
         elapse_time0 = time.time() - t0
