@@ -182,7 +182,7 @@ def problem_formulation(N, delta, weight_factor):
     # Step 3: formulate the coupling matrix
     # 3.1) Fixed recourse equation formulation
     # 3.1.1) Energy storage system systems
-
+    # Remove the constraints to the
     T_s = zeros((T_first_stage, len(first_stage_model)))
     # Step 4: Using the benders iteration
 
