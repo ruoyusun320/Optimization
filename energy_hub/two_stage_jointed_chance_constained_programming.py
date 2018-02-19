@@ -13,7 +13,7 @@ from random import random
 from gurobipy import *
 
 
-def problem_formulation(N, delta, weight_factor):
+def problem_formulation(N, delta, weight_factor, confidential_level):
     """
     Jointed optimization for the electrical and thermal optimisation
     :param N: number of scenario
@@ -161,7 +161,7 @@ def problem_formulation(N, delta, weight_factor):
         Pess_ch[i] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS, name="Pess_ch{0}".format(i))
 
     for i in range(N):
-        Iw[i] = model.addVars(lb=0, ub=1, vtype=GRB.BINARY, name="Iw{0}".format(i))
+        Iw[i] = model.addVar(vtype=GRB.BINARY, name="Iw{0}".format(i))
     # 2) second stage optimisation
     # This serves as the test system for the test system
     pug = {}
@@ -215,17 +215,17 @@ def problem_formulation(N, delta, weight_factor):
     for j in range(N):
         for i in range(T_first_stage):
             H_relax_positive[i + j * T_first_stage] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS,
-                                                                    name="H_relax_positive{0}".format(
-                                                                        i + j * T_first_stage))
+                                                                   name="H_relax_positive{0}".format(
+                                                                       i + j * T_first_stage))
             H_relax_negative[i + j * T_first_stage] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS,
-                                                                    name="H_relax_negative{0}".format(
-                                                                        i + j * T_first_stage))
+                                                                   name="H_relax_negative{0}".format(
+                                                                       i + j * T_first_stage))
             C_relax_positive[i + j * T_first_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
-                                                                    name="H_relax_positive{0}".format(
-                                                                        i + j * T_first_stage))
+                                                                   name="H_relax_positive{0}".format(
+                                                                       i + j * T_first_stage))
             C_relax_negative[i + j * T_first_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
-                                                                    name="H_relax_positive{0}".format(
-                                                                        i + j * T_first_stage))
+                                                                   name="H_relax_positive{0}".format(
+                                                                       i + j * T_first_stage))
 
     obj_first_stage = 0
     for i in range(T_first_stage):
@@ -299,6 +299,17 @@ def problem_formulation(N, delta, weight_factor):
             model.addConstr(
                 pc_negative_derivation[i + j * T_second_stage] >= CD[int(i * Delta_second_stage)] - pHVAC[i] * eff_HVAC)
 
+    for j in range(N):
+        for i in range(T_first_stage):
+            model.addConstr(H_relax_positive[i + j * T_first_stage] <= Iw[j] * Gmax)
+            model.addConstr(H_relax_negative[i + j * T_first_stage] <= Iw[j] * Gmax)
+            model.addConstr(C_relax_negative[i + j * T_first_stage] <= Iw[j] * PHVAC_max)
+            model.addConstr(C_relax_positive[i + j * T_first_stage] <= Iw[j] * PHVAC_max)
+
+    expr = 0
+    for j in range(N):
+        expr += Iw[j]
+    model.addConstr(expr <= N * (1 - confidential_level))
     # set the objective function
     obj = ws * obj_first_stage + (1 - ws) * obj_second_stage / N
     model.setObjective(obj)
@@ -317,6 +328,7 @@ def problem_formulation(N, delta, weight_factor):
     Eess_x = zeros((T_first_stage, 1))
     Pess_dc_x = zeros((T_first_stage, 1))
     Pess_ch_x = zeros((T_first_stage, 1))
+    Iw_x = zeros((N, 1))
 
     pug_x = zeros((T_second_stage, N))
     g_x = zeros((T_second_stage, N))
@@ -341,6 +353,9 @@ def problem_formulation(N, delta, weight_factor):
         Eess_x[i] = model.getVarByName("Eess{0}".format(i)).X
         Pess_dc_x[i] = model.getVarByName("Pess_dc{0}".format(i)).X
         Pess_ch_x[i] = model.getVarByName("Pess_ch{0}".format(i)).X
+
+    for i in range(N):
+        Iw_x[i] = model.getVarByName("Iw{0}".format(i)).X
 
     for j in range(N):
         for i in range(T_second_stage):
@@ -372,6 +387,7 @@ def problem_formulation(N, delta, weight_factor):
               "Eess": Eess_x,
               "Pess_dc": Pess_dc_x,
               "Pess_ch": Pess_ch_x,
+              "Iw": Iw_x,
               "obj": obj
               }
 
@@ -396,5 +412,6 @@ def problem_formulation(N, delta, weight_factor):
 
 
 if __name__ == "__main__":
-    model = problem_formulation(50, 0.05, 0.01)
+    model = problem_formulation(100, 0.05, 0.01, 0.7)
     print(model)
+    print(sum(model['Iw']))
