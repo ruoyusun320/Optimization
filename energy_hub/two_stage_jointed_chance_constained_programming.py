@@ -22,8 +22,8 @@ def problem_formulation(N, delta, weight_factor):
     :return:
     """
     # Parameters settings for the
-    PHVDC_max = 10
-    eff_HVDC = 0.9
+    PHVAC_max = 10
+    eff_HVAC = 0.9
     Pess_ch_max = 10
     Pess_dc_max = 10
     eff_dc = 0.9
@@ -148,16 +148,20 @@ def problem_formulation(N, delta, weight_factor):
     Eess = {}
     Pess_dc = {}
     Pess_ch = {}
+    # For the second stage optimization
     Iw = {}
     for i in range(T_first_stage):
         Pug[i] = model.addVar(lb=0, vtype=GRB.CONTINUOUS, name="Pug{0}".format(i))
         G[i] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS, name="G{0}".format(i))
         PAC2DC[i] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS, name="A2D{0}".format(i))
         PDC2AC[i] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS, name="D2A{0}".format(i))
-        PHVAC[i] = model.addVar(lb=0, ub=PHVDC_max, vtype=GRB.CONTINUOUS, name="PHVAC{0}".format(i))
+        PHVAC[i] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS, name="PHVAC{0}".format(i))
         Eess[i] = model.addVar(lb=Emin, ub=Emax, vtype=GRB.CONTINUOUS, name="Eess{0}".format(i))
         Pess_dc[i] = model.addVar(lb=0, ub=Pess_dc_max, vtype=GRB.CONTINUOUS, name="Pess_dc{0}".format(i))
         Pess_ch[i] = model.addVar(lb=0, ub=Pess_ch_max, vtype=GRB.CONTINUOUS, name="Pess_ch{0}".format(i))
+
+    for i in range(N):
+        Iw[i] = model.addVars(lb=0, ub=1, vtype=GRB.BINARY, name="Iw{0}".format(i))
     # 2) second stage optimisation
     # This serves as the test system for the test system
     pug = {}
@@ -173,6 +177,10 @@ def problem_formulation(N, delta, weight_factor):
     pc_positive_derivation = {}
     pc_negative_derivation = {}
 
+    H_relax_positive = {}
+    H_relax_negative = {}
+    C_relax_positive = {}
+    C_relax_negative = {}
     for j in range(N):
         for i in range(T_second_stage):
             pug[i + j * T_second_stage] = model.addVar(lb=0, vtype=GRB.CONTINUOUS,
@@ -183,7 +191,7 @@ def problem_formulation(N, delta, weight_factor):
                                                           name="a2d{0}".format(i + j * T_second_stage))
             pDC2AC[i + j * T_second_stage] = model.addVar(lb=0, ub=BIC_cap, vtype=GRB.CONTINUOUS,
                                                           name="d2a{0}".format(i + j * T_second_stage))
-            pHVAC[i + j * T_second_stage] = model.addVar(lb=0, ub=PHVDC_max, vtype=GRB.CONTINUOUS,
+            pHVAC[i + j * T_second_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
                                                          name="pHVAC{0}".format(i + j * T_second_stage))
             eess[i + j * T_second_stage] = model.addVar(lb=Emin, ub=Emax, vtype=GRB.CONTINUOUS,
                                                         name="eess{0}".format(i + j * T_second_stage))
@@ -204,6 +212,20 @@ def problem_formulation(N, delta, weight_factor):
             pc_negative_derivation[i + j * T_second_stage] = model.addVar(lb=0, ub=inf, vtype=GRB.CONTINUOUS,
                                                                           name="pc_negative_derivation{0}".format(
                                                                               i + j * T_second_stage))
+    for j in range(N):
+        for i in range(T_first_stage):
+            H_relax_positive[i + j * T_first_stage] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS,
+                                                                    name="H_relax_positive{0}".format(
+                                                                        i + j * T_first_stage))
+            H_relax_negative[i + j * T_first_stage] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS,
+                                                                    name="H_relax_negative{0}".format(
+                                                                        i + j * T_first_stage))
+            C_relax_positive[i + j * T_first_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
+                                                                    name="H_relax_positive{0}".format(
+                                                                        i + j * T_first_stage))
+            C_relax_negative[i + j * T_first_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
+                                                                    name="H_relax_positive{0}".format(
+                                                                        i + j * T_first_stage))
 
     obj_first_stage = 0
     for i in range(T_first_stage):
@@ -223,7 +245,7 @@ def problem_formulation(N, delta, weight_factor):
 
     for i in range(T_first_stage):
         model.addConstr(G[i] * eff_CHP_h == HD[i])
-        model.addConstr(PHVAC[i] * eff_HVDC == CD[i])
+        model.addConstr(PHVAC[i] * eff_HVAC == CD[i])
         model.addConstr(Pug[i] + G[i] * eff_CHP_e + eff_BIC * PDC2AC[i] == AC_PD[i] + PAC2DC[i])
         model.addConstr(Pess_dc[i] - Pess_ch[i] + eff_BIC * PAC2DC[i] + PV_PG[i] == DC_PD[i] + PDC2AC[i])
         if i == 0:
@@ -253,11 +275,13 @@ def problem_formulation(N, delta, weight_factor):
     for j in range(N):
         for i in range(T_first_stage):
             model.addConstr((g[4 * i + j * T_second_stage] + g[4 * i + 1 + j * T_second_stage] + g[
-                4 * i + 2 + j * T_second_stage] + g[4 * i + 3 + j * T_second_stage]) * eff_CHP_h * Delta_second_stage ==
+                4 * i + 2 + j * T_second_stage] + g[4 * i + 3 + j * T_second_stage]) * eff_CHP_h * Delta_second_stage +
+                            H_relax_positive[i + j * T_first_stage] - H_relax_negative[i + j * T_first_stage] ==
                             HD[i])
             model.addConstr((pHVAC[4 * i + j * T_second_stage] + pHVAC[4 * i + 1 + j * T_second_stage] + pHVAC[
                 4 * i + 2 + j * T_second_stage] + pHVAC[
-                                 4 * i + 3 + j * T_second_stage]) * eff_HVDC * Delta_second_stage == CD[i])
+                                 4 * i + 3 + j * T_second_stage]) * eff_HVAC * Delta_second_stage + H_relax_positive[
+                                i + j * T_first_stage] - H_relax_negative[i + j * T_first_stage] == CD[i])
 
     # Coupling constraints
     for j in range(N):
@@ -271,9 +295,9 @@ def problem_formulation(N, delta, weight_factor):
             model.addConstr(
                 ph_negative_derivation[i + j * T_second_stage] >= HD[int(i * Delta_second_stage)] - g[i] * eff_CHP_h)
             model.addConstr(
-                pc_positive_derivation[i + j * T_second_stage] >= pHVAC[i] * eff_HVDC - CD[int(i * Delta_second_stage)])
+                pc_positive_derivation[i + j * T_second_stage] >= pHVAC[i] * eff_HVAC - CD[int(i * Delta_second_stage)])
             model.addConstr(
-                pc_negative_derivation[i + j * T_second_stage] >= CD[int(i * Delta_second_stage)] - pHVAC[i] * eff_HVDC)
+                pc_negative_derivation[i + j * T_second_stage] >= CD[int(i * Delta_second_stage)] - pHVAC[i] * eff_HVAC)
 
     # set the objective function
     obj = ws * obj_first_stage + (1 - ws) * obj_second_stage / N
