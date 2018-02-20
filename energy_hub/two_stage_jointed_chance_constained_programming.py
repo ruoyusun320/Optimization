@@ -6,14 +6,14 @@ Two stage stochastic optimization problem for the hybrid AC/DC microgrid embedde
 Note:
 This function can also be used as a test function to evaluate the value of information
 """
-from numpy import array, arange, zeros, inf
+from numpy import array, arange, zeros, inf, savetxt
 from matplotlib import pyplot
 from scipy import interpolate
 from random import random
 from gurobipy import *
 
 
-def problem_formulation(N, delta, weight_factor, confidential_level):
+def problem_formulation(N, delta, weight_factor, confidential_level, ws):
     """
     Jointed optimization for the electrical and thermal optimisation
     :param N: number of scenario
@@ -48,7 +48,6 @@ def problem_formulation(N, delta, weight_factor, confidential_level):
     Delta_second_stage = 0.25
     T_first_stage = 24
     T_second_stage = int(T_first_stage / Delta_second_stage)
-    ws = 0.5
     # AC electrical demand
     AC_PD = array([323.0284, 308.2374, 318.1886, 307.9809, 331.2170, 368.6539, 702.0040, 577.7045, 1180.4547, 1227.6240,
                    1282.9344, 1311.9738, 1268.9502, 1321.7436, 1323.9218, 1327.1464, 1386.9117, 1321.6387, 1132.0476,
@@ -212,6 +211,8 @@ def problem_formulation(N, delta, weight_factor, confidential_level):
             pc_negative_derivation[i + j * T_second_stage] = model.addVar(lb=0, ub=inf, vtype=GRB.CONTINUOUS,
                                                                           name="pc_negative_derivation{0}".format(
                                                                               i + j * T_second_stage))
+    model.addConstr(Eess[T_first_stage - 1] == E0)
+
     for j in range(N):
         for i in range(T_first_stage):
             H_relax_positive[i + j * T_first_stage] = model.addVar(lb=0, ub=Gmax, vtype=GRB.CONTINUOUS,
@@ -376,7 +377,12 @@ def problem_formulation(N, delta, weight_factor, confidential_level):
                 "pc_positive_derivation{0}".format(i + j * T_second_stage)).X
             pc_negative_derivation_x[i, j] = model.getVarByName(
                 "pc_negative_derivation{0}".format(i + j * T_second_stage)).X
-
+    # Calculate the objective function in the second stage
+    obj_second_stage_x = zeros((N, 1))
+    for j in range(N):
+        for i in range(T_second_stage):
+            obj_second_stage_x[j] += (g_x[i, j] * Gas_price + Electric_price[int(i * Delta_second_stage)] * \
+                                      pug_x[i, j] + Eess_cost * (pess_ch_x[i, j] + pess_dc_x[i, j])) * Delta_second_stage
     obj = obj.getValue()
 
     result = {"PUG": Pug_x,
@@ -390,28 +396,24 @@ def problem_formulation(N, delta, weight_factor, confidential_level):
               "Iw": Iw_x,
               "obj": obj
               }
+    savetxt('Pug.csv', Pug_x, delimiter=",", fmt='%1.4f')
+    savetxt('G.csv', G_x, delimiter=",", fmt='%1.4f')
+    savetxt('PAC2DC.csv', PAC2DC_x, delimiter=",", fmt='%1.4f')
+    savetxt('PDC2AC.csv', PDC2AC_x, delimiter=",", fmt='%1.4f')
+    savetxt('PHVAC.csv', PHVAC_x, delimiter=",", fmt='%1.4f')
+    savetxt('Eess.csv', Eess_x, delimiter=",", fmt='%1.4f')
+    savetxt('Pess_dc.csv', Pess_dc_x, delimiter=",", fmt='%1.4f')
+    savetxt('Pess_ch.csv', Pess_ch_x, delimiter=",", fmt='%1.4f')
+    savetxt('obj_sec.csv', obj_second_stage_x, delimiter=",", fmt='%1.4f')
+    # Analysis the result obtained from the first stage decision making
+    del model
+    Iw_r = []
+    Obj_r = []
 
-    # from energy_hub.problem_formualtion import ProblemFormulation
-    # from solvers.mixed_integer_solvers_gurobi import mixed_integer_linear_programming as milp
-
-    # test_model = ProblemFormulation()
-    # test_model = test_model.first_stage_problem(PHVDC_max, eff_HVDC, Pess_ch_max, Pess_dc_max, eff_dc, eff_ch, E0, Emax,
-    #                                             Emin, BIC_cap, Gmax, eff_BIC, eff_CHP_e, eff_CHP_h, AC_PD, DC_PD, HD,
-    #                                             CD, PV_PG, Gas_price, Electric_price, Eess_cost, Delta_first_stage, T_first_stage)
-    # c = test_model["c"]
-    # A = test_model["A"]
-    # b = test_model["b"]
-    # Aeq = test_model["Aeq"]
-    # beq = test_model["beq"]
-    # lb = test_model["lb"]
-    # ub = test_model["ub"]
-    # vtypes = ["c"] * len(lb)
-    # (solution, obj, success) = milp(c, Aeq=Aeq, beq=beq, A=A, b=b, xmin=lb, xmax=ub,vtypes=vtypes)
-    # gap = obj/result["obj"]
     return result  # Formulated mixed integer linear programming problem
 
 
 if __name__ == "__main__":
-    model = problem_formulation(100, 0.05, 0.01, 0.7)
+    model = problem_formulation(100, 0.05, 0.01, 1, 1)
     print(model)
     print(sum(model['Iw']))
