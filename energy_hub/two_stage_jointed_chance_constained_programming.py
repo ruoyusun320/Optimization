@@ -6,11 +6,13 @@ Two stage stochastic optimization problem for the hybrid AC/DC microgrid embedde
 Note:
 This function can also be used as a test function to evaluate the value of information
 """
-from numpy import array, arange, zeros, inf, savetxt
+from numpy import array, arange, zeros, inf, savetxt, random
 from matplotlib import pyplot
 from scipy import interpolate
 from random import random
 from gurobipy import *
+from numpy import random as rnd
+import pandas as pd
 
 
 def problem_formulation(N, delta, weight_factor, confidential_level, ws):
@@ -129,13 +131,20 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
     CD_scenario = zeros(shape=(N, T_second_stage))
     PV_PG_scenario = zeros(shape=(N, T_second_stage))
 
+    # for i in range(N):
+    #     for j in range(T_second_stage):
+    #         AC_PD_scenario[i, j] = AC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
+    #         DC_PD_scenario[i, j] = DC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
+    #         HD_scenario[i, j] = HD_second_stage[j] * (1 - delta + 2 * delta * random())
+    #         CD_scenario[i, j] = CD_second_stage[j] * (1 - delta + 2 * delta * random())
+    #         PV_PG_scenario[i, j] = PV_PG_second_stage[j] * (1 - delta + 2 * delta * random())
     for i in range(N):
         for j in range(T_second_stage):
-            AC_PD_scenario[i, j] = AC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
-            DC_PD_scenario[i, j] = DC_PD_second_stage[j] * (1 - delta + 2 * delta * random())
-            HD_scenario[i, j] = HD_second_stage[j] * (1 - delta + 2 * delta * random())
-            CD_scenario[i, j] = CD_second_stage[j] * (1 - delta + 2 * delta * random())
-            PV_PG_scenario[i, j] = PV_PG_second_stage[j] * (1 - delta + 2 * delta * random())
+            AC_PD_scenario[i, j] = AC_PD_second_stage[j] * (1 + rnd.normal(0, delta))
+            DC_PD_scenario[i, j] = DC_PD_second_stage[j] * (1 + rnd.normal(0, delta))
+            HD_scenario[i, j] = HD_second_stage[j] * (1 + rnd.normal(0, delta))
+            CD_scenario[i, j] = CD_second_stage[j] * (1 + rnd.normal(0, delta))
+            PV_PG_scenario[i, j] = PV_PG_second_stage[j] * (1 + rnd.normal(0, delta))
     # Formulation of the two-stage optimization problem
     # 1) First stage optimization problems
     model = Model("EnergyHub")
@@ -222,10 +231,10 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
                                                                    name="H_relax_negative{0}".format(
                                                                        i + j * T_first_stage))
             C_relax_positive[i + j * T_first_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
-                                                                   name="H_relax_positive{0}".format(
+                                                                   name="C_relax_positive{0}".format(
                                                                        i + j * T_first_stage))
             C_relax_negative[i + j * T_first_stage] = model.addVar(lb=0, ub=PHVAC_max, vtype=GRB.CONTINUOUS,
-                                                                   name="H_relax_positive{0}".format(
+                                                                   name="C_relax_negative{0}".format(
                                                                        i + j * T_first_stage))
 
     obj_first_stage = 0
@@ -310,7 +319,7 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
     expr = 0
     for j in range(N):
         expr += Iw[j]
-    model.addConstr(expr <= N * (1 - confidential_level))
+    model.addConstr(expr <= N * confidential_level)
     # set the objective function
     obj = ws * obj_first_stage + (1 - ws) * obj_second_stage / N
     model.setObjective(obj)
@@ -382,8 +391,25 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
     for j in range(N):
         for i in range(T_second_stage):
             obj_second_stage_x[j] += (g_x[i, j] * Gas_price + Electric_price[int(i * Delta_second_stage)] * \
-                                      pug_x[i, j] + Eess_cost * (pess_ch_x[i, j] + pess_dc_x[i, j])) * Delta_second_stage
+                                      pug_x[i, j] + Eess_cost * (
+                                              pess_ch_x[i, j] + pess_dc_x[i, j])) * Delta_second_stage
     obj = obj.getValue()
+    obj_first_stage_x = 0
+    for i in range(T_first_stage):
+        obj_first_stage_x += (G_x[i] * Gas_price + Electric_price[i] * Pug_x[i] + Eess_cost * (
+                Pess_ch_x[i] + Pess_dc_x[i])) * Delta_first_stage
+
+    H_relax_positive_x = zeros((T_first_stage, N))
+    H_relax_negative_x = zeros((T_first_stage, N))
+    C_relax_positive_x = zeros((T_first_stage, N))
+    C_relax_negative_x = zeros((T_first_stage, N))
+
+    for j in range(N):
+        for i in range(T_first_stage):
+            H_relax_positive_x[i, j] = model.getVarByName("H_relax_positive{0}".format(i + j * T_first_stage)).X
+            H_relax_negative_x[i, j] = model.getVarByName("H_relax_negative{0}".format(i + j * T_first_stage)).X
+            C_relax_positive_x[i, j] = model.getVarByName("C_relax_positive{0}".format(i + j * T_first_stage)).X
+            C_relax_negative_x[i, j] = model.getVarByName("C_relax_negative{0}".format(i + j * T_first_stage)).X
 
     result = {"PUG": Pug_x,
               "G": G_x,
@@ -394,7 +420,7 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
               "Pess_dc": Pess_dc_x,
               "Pess_ch": Pess_ch_x,
               "Iw": Iw_x,
-              "obj": obj
+              "obj": obj_first_stage_x
               }
     savetxt('Pug.csv', Pug_x, delimiter=",", fmt='%1.4f')
     savetxt('G.csv', G_x, delimiter=",", fmt='%1.4f')
@@ -405,6 +431,44 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
     savetxt('Pess_dc.csv', Pess_dc_x, delimiter=",", fmt='%1.4f')
     savetxt('Pess_ch.csv', Pess_ch_x, delimiter=",", fmt='%1.4f')
     savetxt('obj_sec.csv', obj_second_stage_x, delimiter=",", fmt='%1.4f')
+    savetxt('ph_positive_derivation.csv', ph_positive_derivation_x, fmt='%1.8f')
+    savetxt('ph_negative_derivation.csv', ph_negative_derivation_x, fmt='%1.8f')
+    savetxt('pc_positive_derivation.csv', pc_positive_derivation_x, fmt='%1.8f')
+    savetxt('pc_negative_derivation.csv', pc_negative_derivation_x, fmt='%1.8f')
+    df = pd.DataFrame(ph_positive_derivation_x)
+    filepath = 'ph_positive_derivation.xlsx'
+    df.to_excel(filepath, index=False)
+
+    df = pd.DataFrame(ph_negative_derivation_x)
+    filepath = 'ph_negative_derivation.xlsx'
+    df.to_excel(filepath, index=False)
+
+    df = pd.DataFrame(pc_positive_derivation_x)
+    filepath = 'pc_positive_derivation.xlsx'
+    df.to_excel(filepath, index=False)
+
+    df = pd.DataFrame(pc_negative_derivation_x)
+    filepath = 'pc_negative_derivation.xlsx'
+    df.to_excel(filepath, index=False)
+    # Record the second stage result
+    df = pd.DataFrame(H_relax_positive_x)
+    filepath = 'H_relax_positive.xlsx'
+    df.to_excel(filepath, index=False)
+
+    df = pd.DataFrame(H_relax_negative_x)
+    filepath = 'H_relax_negative.xlsx'
+    df.to_excel(filepath, index=False)
+
+    df = pd.DataFrame(C_relax_positive_x)
+    filepath = 'C_relax_positive.xlsx'
+    df.to_excel(filepath, index=False)
+
+    df = pd.DataFrame(C_relax_negative_x)
+    filepath = 'C_relax_negative.xlsx'
+    df.to_excel(filepath, index=False)
+
+
+
     # Analysis the result obtained from the first stage decision making
     del model
     Iw_r = []
@@ -414,6 +478,6 @@ def problem_formulation(N, delta, weight_factor, confidential_level, ws):
 
 
 if __name__ == "__main__":
-    model = problem_formulation(100, 0.05, 0.01, 1, 1)
+    model = problem_formulation(100, 0.05, 0.000001, 0.05, 0.5)
     print(model)
     print(sum(model['Iw']))
