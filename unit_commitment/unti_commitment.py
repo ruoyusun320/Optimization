@@ -30,7 +30,8 @@ def main(case):
     nb = shape(case['bus'])[0]  # number of buses
     nl = shape(case['branch'])[0]  # number of branches
     ng = shape(case['gen'])[0]  # number of schedule injections
-
+    # X:=[Ig,Pg]
+    
 
     return model
 
