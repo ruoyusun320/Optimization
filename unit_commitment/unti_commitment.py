@@ -19,12 +19,12 @@ def main(case):
     :return:
     """
     from unit_commitment.data_format.data_format import IG, PG
+
     baseMVA, bus, gen, branch, profile = case["baseMVA"], case["bus"], case["gen"], case["branch"],case["Load_profile"]
     nb = shape(case['bus'])[0]  # number of buses
     nl = shape(case['branch'])[0]  # number of branches
     ng = shape(case['gen'])[0]  # number of schedule injections
-    # X:=[Ig,Pg]
-    
+
 
     return model
 
