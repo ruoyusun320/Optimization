@@ -23,7 +23,7 @@ def main(case):
     :param case: The test case for unit commitment problem
     :return:
     """
-    from unit_commitment.data_format import IG, PG
+    from unit_commitment.data_format.data_format import IG, PG
     case = loadcase(case)
     case = ext2int(case)
     baseMVA, bus, gen, branch, gencost = case["baseMVA"], case["bus"], case["gen"], case["branch"], case["gencost"]  #
