@@ -5,6 +5,26 @@ http://motor.ece.iit.edu/data/
 """
 from numpy import array
 
+# Transmission line data format
+F_BUS = 0
+T_BUS = 1
+BR_X = 2
+RATE_A = 3
+
+# Generator format
+GEN_BUS = 0
+COST_C = 1
+COST_B = 2
+COST_A = 3
+PG_MAX = 4
+PG_MIN = 5
+I0 = 6
+MIN_DOWN = 7
+MIN_UP = 8
+RU = 9
+RD = 10
+COLD_START = 11
+
 
 def case118():
     ppc = {"version": '2'}
@@ -103,6 +123,7 @@ def case118():
         0.005687008,
         0.008839909,
     ])
+
     ppc["gen"] = array([
         [4, 31.67, 26.2438, 0.069663, 30, 1, 1, 1, 15, 15, 40],
         [6, 31.67, 26.2438, 0.069663, 30, 5, 1, 1, 1, 15, 15, 40],
@@ -347,5 +368,30 @@ def case118():
         [75, 118, 0.0481, 175],
         [76, 118, 0.0544, 175],
     ])
+
+    ppc["Load_profile"] = array([4620,
+                                 4356,
+                                 3828,
+                                 2640,
+                                 3300,
+                                 3960,
+                                 4620,
+                                 5148,
+                                 5412,
+                                 5808,
+                                 5874,
+                                 5544,
+                                 5280,
+                                 5016,
+                                 5808,
+                                 5940,
+                                 5610,
+                                 5874,
+                                 6204,
+                                 6468,
+                                 6600,
+                                 5940,
+                                 5742,
+                                 5412])
 
     return ppc
