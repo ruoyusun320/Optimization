@@ -7,5 +7,4 @@ Unit commitment problems for power systems, including the following models.
 5) Two-stage unit commitment with recourse
 @author:Zhao Tianyang
 @e-mail:zhaoty@ntu.edu.sg
-
 """
