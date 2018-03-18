@@ -9,7 +9,8 @@ from pypower.ext2int import ext2int
 from numpy import flatnonzero as find
 from scipy.sparse.linalg import inv
 from scipy.sparse import vstack
-from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate,hstack
+from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate, append, matlib
+import matplotlib.pyplot as plt
 
 
 def main(case):
@@ -35,9 +36,36 @@ def main(case):
     ng = shape(case['gen'])[0]  # number of schedule injections
     # Formulate a mixed integer quadratic programming problem
     # 1) Announce the variables
-    # 1.1) lb:=[]
-    lb = hstack[zeros((ng,1)),gen[:,PG_MIN]]
-
+    # 1.1) boundary information
+    T = case["Load_profile"].shape[0]
+    lb = append(zeros((ng, 1)), gen[:, PG_MIN])
+    ub = append(ones((ng, 1)), gen[:, PG_MAX])
+    LB = matlib.repmat(lb, 1, T)
+    UB = matlib.repmat(ub, 1, T)
+    nx = LB.size
+    # 1.2) boundary information
+    vtypes = []
+    for i in range(T):
+        vtypes += ["B"] * ng
+        vtypes += ["C"] * ng
+    # 1.3) objective information
+    c = append(gen[:, COST_C], gen[:, COST_B])
+    C = matlib.repmat(c, 1, T)
+    q = append(zeros((ng, 1)), gen[:, COST_A])
+    Q = matlib.repmat(q, 1, T)
+    Q = diag(Q[0])
+    # 2) Constraint set
+    # 2.1) Power balance equation
+    Aeq = zeros((T, nx))
+    for i in range(T):
+        Aeq[i, i * 2 * ng + ng:(i + 1) * 2 * ng] = 1
+    beq = zeros((T, 1))
+    for i in range(T):
+        beq[i] = case["Load_profile"][i]
+    plt.plot(LB[0])
+    plt.show()
+    model["c"] = C
+    
     return model
 
 
