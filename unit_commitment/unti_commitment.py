@@ -11,6 +11,7 @@ from scipy.sparse.linalg import inv
 from scipy.sparse import vstack
 from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate, append, matlib
 import matplotlib.pyplot as plt
+from solvers.mixed_integer_quadratic_programming import mixed_integer_quadratic_programming as miqp
 
 
 def main(case):
@@ -62,11 +63,11 @@ def main(case):
     beq = zeros((T, 1))
     for i in range(T):
         beq[i] = case["Load_profile"][i]
-    plt.plot(LB[0])
-    plt.show()
-    model["c"] = C
-    
-    return model
+    # plt.plot(LB[0])
+    # plt.show()
+    (xx, obj, success) = miqp(c=C[0], Q=Q, Aeq=Aeq, beq=beq, xmin=LB[0], xmax=UB[0], vtypes=vtypes)
+
+    return success
 
 
 if __name__ == "__main__":
