@@ -44,6 +44,7 @@ def main(case):
     LB = matlib.repmat(lb, 1, T)
     UB = matlib.repmat(ub, 1, T)
     nx = LB.size
+    NX = 2 * ng
     # 1.2) boundary information
     vtypes = []
     for i in range(T):
@@ -59,15 +60,38 @@ def main(case):
     # 2.1) Power balance equation
     Aeq = zeros((T, nx))
     for i in range(T):
-        Aeq[i, i * 2 * ng + ng:(i + 1) * 2 * ng] = 1
+        Aeq[i, i * NX + ng:(i + 1) * NX] = 1
     beq = zeros((T, 1))
     for i in range(T):
         beq[i] = case["Load_profile"][i]
+    # 2.2) Power range limitation
+    Aineq = zeros((T * ng, nx))
+    bineq = zeros((T * ng, 1))
+    for i in range(T):
+        for j in range(ng):
+            Aineq[i + j, i * NX + j] = gen[j, PG_MIN]
+            Aineq[i + j, i * NX + ng + j] = -1
+
+    Aineq_temp = zeros((T * ng, nx))
+    bineq_temp = zeros((T * ng, 1))
+    for i in range(T):
+        for j in range(ng):
+            Aineq_temp[i + j, i * NX + j] = -gen[j, PG_MAX]
+            Aineq_temp[i + j, i * NX + ng + j] = 1
+
     # plt.plot(LB[0])
     # plt.show()
-    (xx, obj, success) = miqp(c=C[0], Q=Q, Aeq=Aeq, beq=beq, xmin=LB[0], xmax=UB[0], vtypes=vtypes)
-
-    return success
+    model = {}
+    model["c"] = C[0]
+    model["Q"] = Q
+    model["Aeq"] = Aeq
+    model["beq"] = beq
+    model["lb"] = LB[0]
+    model["ub"] = UB[0]
+    model["Aineq"] = concatenate((Aineq, Aineq_temp), axis=0)
+    model["bineq"] = append(bineq, bineq_temp)
+    model["vtypes"] = vtypes
+    return model
 
 
 if __name__ == "__main__":
@@ -75,3 +99,8 @@ if __name__ == "__main__":
 
     test_case = case118.case118()
     model = main(test_case)
+    (xx, obj, success) = miqp(c=model["c"], Q=model["Q"], Aeq=model["Aeq"], A=model["Aineq"], b=model["bineq"],
+                              beq=model["beq"], xmin=model["lb"],
+                              xmax=model["ub"], vtypes=model["vtypes"])
+    plt.plot(xx)
+    plt.show()
