@@ -99,7 +99,10 @@ def mixed_integer_quadratic_programming(c, Q, Aeq=None, beq=None, A=None, b=None
                          stepsize, obj, alphap, alphad
                        - C{message} - exit message
         """
-    nx = c.shape[0]  # number of decision variables
+    if type(c) != list:
+        nx = c.shape[0]  # number of decision variables
+    else:
+        nx = len(c)
     if A.any():
         if A.shape[0]:
             nineq = A.shape[0]  # number of equality constraints

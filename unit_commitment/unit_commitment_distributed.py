@@ -26,65 +26,70 @@ def problem_formulation(case):
     gen[:, GEN_BUS] = gen[:, GEN_BUS] - 1
     branch[:, F_BUS] = branch[:, F_BUS] - 1
     branch[:, T_BUS] = branch[:, T_BUS] - 1
-
-    nb = shape(case['bus'])[0]  # number of buses
-    nl = shape(case['branch'])[0]  # number of branches
     ng = shape(case['gen'])[0]  # number of schedule injections
     # Formulate a mixed integer quadratic programming problem
     # 1) Announce the variables
     # 1.1) boundary information
     T = case["Load_profile"].shape[0]
-    lb = append(zeros((ng, 1)), gen[:, PG_MIN])
-    ub = append(ones((ng, 1)), gen[:, PG_MAX])
-    LB = matlib.repmat(lb, 1, T)
-    UB = matlib.repmat(ub, 1, T)
-    nx = LB.size
-    NX = 2 * ng
-    # 1.2) boundary information
+    lb = []
+    for i in range(ng):
+        lb += [0] * T
+        lb += [gen[i, PG_MIN]] * T
+    ub = []
+    for i in range(ng):
+        ub += [1] * T
+        ub += [gen[i, PG_MAX]] * T
+    nx = len(lb)
+    NX = 2 * T
+    # 1.2) variable information
     vtypes = []
-    for i in range(T):
-        vtypes += ["B"] * ng
-        vtypes += ["C"] * ng
+    for i in range(ng):
+        vtypes += ["B"] * T
+        vtypes += ["C"] * T
     # 1.3) objective information
-    c = append(gen[:, COST_C], gen[:, COST_B])
-    C = matlib.repmat(c, 1, T)
-    q = append(zeros((ng, 1)), gen[:, COST_A])
-    Q = matlib.repmat(q, 1, T)
-    Q = diag(Q[0])
+    c = []
+    q = []
+    for i in range(ng):
+        c += [gen[i, COST_C]] * T
+        c += [gen[i, COST_B]] * T
+        q += [0] * T
+        q += [gen[i, COST_A]] * T
+    Q = diag(q)
     # 2) Constraint set
     # 2.1) Power balance equation
     Aeq = zeros((T, nx))
     for i in range(T):
-        Aeq[i, i * NX + ng:(i + 1) * NX] = 1
-    beq = zeros((T, 1))
+        for j in range(ng):
+            Aeq[i, j * NX + T + i] = 1
+    beq = [0] * T
     for i in range(T):
         beq[i] = case["Load_profile"][i]
     # 2.2) Power range limitation
     Aineq = zeros((T * ng, nx))
-    bineq = zeros((T * ng, 1))
+    bineq = [0] * T * ng
     for i in range(T):
         for j in range(ng):
-            Aineq[i + j, i * NX + j] = gen[j, PG_MIN]
-            Aineq[i + j, i * NX + ng + j] = -1
+            Aineq[i + j, j * NX + i] = gen[j, PG_MIN]
+            Aineq[i + j, j * NX + T + i] = -1
 
     Aineq_temp = zeros((T * ng, nx))
-    bineq_temp = zeros((T * ng, 1))
+    bineq_temp = [0] * T * ng
     for i in range(T):
         for j in range(ng):
-            Aineq_temp[i + j, i * NX + j] = -gen[j, PG_MAX]
-            Aineq_temp[i + j, i * NX + ng + j] = 1
+            Aineq_temp[i + j, j * NX + i] = -gen[j, PG_MAX]
+            Aineq_temp[i + j, j * NX + T + i] = 1
 
     # plt.plot(LB[0])
     # plt.show()
     model = {}
-    model["c"] = C[0]
+    model["c"] = c
     model["Q"] = Q
     model["Aeq"] = Aeq
     model["beq"] = beq
-    model["lb"] = LB[0]
-    model["ub"] = UB[0]
+    model["lb"] = lb
+    model["ub"] = ub
     model["Aineq"] = concatenate((Aineq, Aineq_temp), axis=0)
-    model["bineq"] = append(bineq, bineq_temp)
+    model["bineq"] = bineq + bineq_temp
     model["vtypes"] = vtypes
     return model
 
