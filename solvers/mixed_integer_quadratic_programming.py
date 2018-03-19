@@ -136,7 +136,8 @@ def mixed_integer_quadratic_programming(c, Q, Aeq=None, beq=None, A=None, b=None
             for i in range(neq):
                 expr = 0
                 for j in range(nx):
-                    expr += x[j] * Aeq[i, j]
+                    if Aeq[i, j] != 0:
+                        expr += x[j] * Aeq[i, j]
                 gurobi_model.addConstr(lhs=expr, sense=GRB.EQUAL, rhs=beq[i])
 
         # Inequal constraints
@@ -144,7 +145,8 @@ def mixed_integer_quadratic_programming(c, Q, Aeq=None, beq=None, A=None, b=None
             for i in range(nineq):
                 expr = 0
                 for j in range(nx):
-                    expr += x[j] * A[i, j]
+                    if A[i, j] != 0:
+                        expr += x[j] * A[i, j]
                 gurobi_model.addConstr(lhs=expr, sense=GRB.LESS_EQUAL, rhs=b[i])
         # Set the objective function
         obj = 0
@@ -153,8 +155,9 @@ def mixed_integer_quadratic_programming(c, Q, Aeq=None, beq=None, A=None, b=None
 
         # Add the quadratic items
         for i in range(nx):
-            # for j in range(nx):
-            obj += x[i] * x[i] * Q[i][i] / 2
+            for j in range(nx):
+                if Q[i][j] != 0:
+                    obj += x[i] * x[j] * Q[i][j] / 2
 
         gurobi_model.setObjective(obj)
 

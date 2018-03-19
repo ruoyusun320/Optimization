@@ -4,23 +4,18 @@ Basic unit commitment to some mix-integer linear/quadratic programming problem
 @e-mail: zhaoty@ntu.edu.sg
 @date:6 Mar 2018
 """
-from pypower.loadcase import loadcase
-from pypower.ext2int import ext2int
-from numpy import flatnonzero as find
-from scipy.sparse.linalg import inv
-from scipy.sparse import vstack
-from numpy import zeros, c_, shape, ix_, ones, r_, arange, sum, diag, concatenate, append, matlib
+from numpy import zeros, shape, ones, diag, concatenate, append, matlib
 import matplotlib.pyplot as plt
 from solvers.mixed_integer_quadratic_programming import mixed_integer_quadratic_programming as miqp
 
 
-def main(case):
+def problem_formulation(case):
     """
     :param case: The test case for unit commitment problem
     :return:
     """
     from unit_commitment.data_format.data_format import IG, PG
-    from unit_commitment.test_cases.case118 import F_BUS, T_BUS, BR_X, RATE_A
+    from unit_commitment.test_cases.case118 import F_BUS, T_BUS
     from unit_commitment.test_cases.case118 import GEN_BUS, COST_C, COST_B, COST_A, PG_MAX, PG_MIN, I0, MIN_DOWN, \
         MIN_UP, RU, RD, COLD_START
     from unit_commitment.test_cases.case118 import BUS_ID, PD
@@ -98,7 +93,7 @@ if __name__ == "__main__":
     from unit_commitment.test_cases import case118
 
     test_case = case118.case118()
-    model = main(test_case)
+    model = problem_formulation(test_case)
     (xx, obj, success) = miqp(c=model["c"], Q=model["Q"], Aeq=model["Aeq"], A=model["Aineq"], b=model["bineq"],
                               beq=model["beq"], xmin=model["lb"],
                               xmax=model["ub"], vtypes=model["vtypes"])
