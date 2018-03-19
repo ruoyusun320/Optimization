@@ -6,7 +6,10 @@ Basic unit commitment to some mix-integer linear/quadratic programming problem
 
 Note: The mathematical model is taken from the following references.
 [1]Tight and Compact MILP Formulation of Start-Up and Shut-Down Ramping in Unit Commitment
-
+Due to the limitation on the ramp constraint, the following paper has been selected as the reference.
+[2]Tight mixed integer linear programming formulations for the unit commitment problem
+Further ramp constraints can be found in
+[3] A State Transition MIP Formulation for the Unit Commitment Problem
 """
 from numpy import zeros, shape, ones, diag, concatenate, append, matlib
 import matplotlib.pyplot as plt
@@ -31,68 +34,151 @@ def problem_formulation(case):
     branch[:, F_BUS] = branch[:, F_BUS] - 1
     branch[:, T_BUS] = branch[:, T_BUS] - 1
     ng = shape(case['gen'])[0]  # number of schedule injections
+    u0 = [0] * ng  # The initial generation status
+    for i in range(ng):
+        u0[i] = int(gen[i, I0] > 0)
     # Formulate a mixed integer quadratic programming problem
     # 1) Announce the variables
+    # [vt,wt,ut,Pt]:start-up,shut-down,status,generation level
     # 1.1) boundary information
     T = case["Load_profile"].shape[0]
     lb = []
     for i in range(ng):
         lb += [0] * T
         lb += [0] * T
+        lb += [0] * T
+        lb += [0] * T
     ub = []
     for i in range(ng):
         ub += [1] * T
+        ub += [1] * T
+        ub += [1] * T
         ub += [gen[i, PG_MAX]] * T
     nx = len(lb)
-    NX = 2 * T
+    NX = 4 * T  # The number of decision variables for each unit
     # 1.2) variable information
     vtypes = []
     for i in range(ng):
+        vtypes += ["C"] * T
+        vtypes += ["C"] * T
         vtypes += ["B"] * T
         vtypes += ["C"] * T
     # 1.3) objective information
     c = []
     q = []
     for i in range(ng):
+        c += [gen[i, COLD_START]] * T
+        c += [0] * T
         c += [gen[i, COST_C]] * T
         c += [gen[i, COST_B]] * T
+
+        q += [0] * T
+        q += [0] * T
         q += [0] * T
         q += [gen[i, COST_A]] * T
+
     Q = diag(q)
     # 2) Constraint set
     # 2.1) Power balance equation
     Aeq = zeros((T, nx))
     for i in range(T):
         for j in range(ng):
-            Aeq[i, j * NX + T + i] = 1
+            Aeq[i, j * NX + 3 * T + i] = 1
     beq = [0] * T
     for i in range(T):
         beq[i] = case["Load_profile"][i]
-    # 2.2) Power range limitation
+    # 2.2) Status transformation of each unit
+    Aeq_temp = zeros((T * ng, nx))
+    beq_temp = [0] * T * ng
+    for i in range(ng):
+        for j in range(T):
+            Aeq_temp[i * T + j, i * NX + j] = 1
+            Aeq_temp[i * T + j, i * NX + j + T] = -1
+            Aeq_temp[i * T + j, i * NX + j + 2 * T] = -1
+            if j != 0:
+                Aeq_temp[i * T + j, i * NX + j - 1 + 2 * T] = 1
+            else:
+                beq_temp[i * T + j] = -u0[i]
+
+    Aeq = concatenate((Aeq, Aeq_temp), axis=0)
+    beq += beq_temp
+    # 2.3) Power range limitation
     Aineq = zeros((T * ng, nx))
     bineq = [0] * T * ng
     for i in range(ng):
         for j in range(T):
-            Aineq[i * T + j, i * NX + j] = gen[i, PG_MIN]
-            Aineq[i * T + j, i * NX + T + j] = -1
+            Aineq[i * T + j, i * NX + 2 * T + j] = gen[i, PG_MIN]
+            Aineq[i * T + j, i * NX + 3 * T + j] = -1
 
     Aineq_temp = zeros((T * ng, nx))
     bineq_temp = [0] * T * ng
     for i in range(ng):
         for j in range(T):
-            Aineq_temp[i * T + j, i * NX + j] = -gen[i, PG_MAX]
-            Aineq_temp[i * T + j, i * NX + T + j] = 1
-    # 2.3) Start up and shut down time limitation
+            Aineq_temp[i * T + j, i * NX + 2 * T + j] = -gen[i, PG_MAX]
+            Aineq_temp[i * T + j, i * NX + 3 * T + j] = 1
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
+
+    # 2.4) Start up and shut down time limitation
+    UP_LIMIT = [0] * ng
+    DOWN_LIMIT = [0] * ng
+    for i in range(ng):
+        UP_LIMIT[i] = T - int(gen[i, MIN_UP])
+        DOWN_LIMIT[i] = T - int(gen[i, MIN_DOWN])
+    # 2.4.1) Up limit
+    Aineq_temp = zeros((sum(UP_LIMIT), nx))
+    bineq_temp = [0] * sum(UP_LIMIT)
+
+    for i in range(ng):
+        for j in range(int(gen[i, MIN_UP]), T):
+            Aineq_temp[sum(UP_LIMIT[0:i]) + j - int(gen[i, MIN_UP]), i * NX + j - int(gen[i, MIN_UP]):i * NX + j] = 1
+            Aineq_temp[sum(UP_LIMIT[0:i]) + j - int(gen[i, MIN_UP]), i * NX + 2 * T + j] = -1
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
+    # 2.4.2) Down limit
+    Aineq_temp = zeros((sum(DOWN_LIMIT), nx))
+    bineq_temp = [1] * sum(DOWN_LIMIT)
+    for i in range(ng):
+        for j in range(int(gen[i, MIN_DOWN]), T):
+            Aineq_temp[sum(DOWN_LIMIT[0:i]) + j - int(gen[i, MIN_DOWN]),
+            i * NX + T + j - int(gen[i, MIN_DOWN]):i * NX + T + j] = 1
+            Aineq_temp[sum(DOWN_LIMIT[0:i]) + j - int(gen[i, MIN_DOWN]), i * NX + 2 * T + j] = 1
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
+    # 2.5) Ramp constraints:
+    # 2.5.1) Ramp up limitation
+    Aineq_temp = zeros((ng * (T - 1), nx))
+    bineq_temp = [0] * ng * (T - 1)
+    for i in range(ng):
+        for j in range(T - 1):
+            Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j + 1] = 1
+            Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j] = -1
+            Aineq_temp[i * (T - 1) + j, i * NX + 2 * T + j] = -gen[i, RU]
+            Aineq_temp[i * (T - 1) + j, i * NX + j] = -gen[i, PG_MAX]
+
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
+    # 2.5.2) Ramp up limitation
+    Aineq_temp = zeros((ng * (T - 1), nx))
+    bineq_temp = [0] * ng * (T - 1)
+    for i in range(ng):
+        for j in range(T - 1):
+            Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j + 1] = -1
+            Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j] = 1
+            Aineq_temp[i * (T - 1) + j, i * NX + 2 * T + j + 1] = -gen[i, RD]
+            Aineq_temp[i * (T - 1) + j, i * NX + T + j + 1] = -gen[i, PG_MIN]
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
 
     model = {}
     model["c"] = c
     model["Q"] = Q
-    model["Aeq"] = Aeq
-    model["beq"] = beq
+    model["Aeq"] = concatenate((Aeq, Aeq_temp), axis=0)
+    model["beq"] = beq + beq_temp
     model["lb"] = lb
     model["ub"] = ub
-    model["Aineq"] = concatenate((Aineq, Aineq_temp), axis=0)
-    model["bineq"] = bineq + bineq_temp
+    model["Aineq"] = Aineq
+    model["bineq"] = bineq
     model["vtypes"] = vtypes
     return model
 
@@ -111,14 +197,22 @@ def solution_decomposition(xx, obj, success):
     result["success"] = success
     result["obj"] = obj
     if success:
+        v = zeros((ng, T))
+        w = zeros((ng, T))
         Ig = zeros((ng, T))
         Pg = zeros((ng, T))
         for i in range(ng):
-            Ig[i, :] = xx[2 * i * T:2 * i * T + T]
-            Pg[i, :] = xx[2 * i * T + T:2 * i * T + 2 * T]
+            v[i, :] = xx[4 * i * T:4 * i * T + T]
+            w[i, :] = xx[4 * i * T + T:4 * i * T + 2 * T]
+            Ig[i, :] = xx[4 * i * T + 2 * T:4 * i * T + 3 * T]
+            Pg[i, :] = xx[4 * i * T + 3 * T:4 * i * T + 4 * T]
+        result["vt"] = v
+        result["wt"] = w
         result["Ig"] = Ig
         result["Pg"] = Pg
     else:
+        result["vt"] = 0
+        result["wt"] = 0
         result["Ig"] = 0
         result["Pg"] = 0
 
@@ -135,5 +229,5 @@ if __name__ == "__main__":
                               xmax=model["ub"], vtypes=model["vtypes"])
     sol = solution_decomposition(xx, obj, success)
 
-    plt.plot(sol["Ig"])
+    plt.plot(sol["Pg"])
     plt.show()
