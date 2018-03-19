@@ -11,7 +11,7 @@ Due to the limitation on the ramp constraint, the following paper has been selec
 Further ramp constraints can be found in
 [3] A State Transition MIP Formulation for the Unit Commitment Problem
 """
-from numpy import zeros, shape, ones, diag, concatenate, r_, arange
+from numpy import zeros, shape, ones, diag, concatenate, r_, arange, divide, linalg
 import matplotlib.pyplot as plt
 from solvers.mixed_integer_quadratic_programming import mixed_integer_quadratic_programming as miqp
 
@@ -191,7 +191,7 @@ def problem_formulation(case, Distribution_factor, Cg, Cd):
         Cx2g = sparse((ones(ng), (arange(ng), index)), (ng, nx))
         Aineq_temp[i * nl:(i + 1) * nl, :] = (Distribution_factor * Cg * Cx2g).todense()
         PD_bus = bus[:, PD] * case["Load_profile"][i]
-        bineq_temp[i * nl:(i + 1) * nl] = branch[:, RATE_A] * 100 + Distribution_factor * Cd * PD_bus
+        bineq_temp[i * nl:(i + 1) * nl] = branch[:, RATE_A] + Distribution_factor * Cd * PD_bus
         del index, Cx2g
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
@@ -205,7 +205,7 @@ def problem_formulation(case, Distribution_factor, Cg, Cd):
         Cx2g = sparse((-ones(ng), (arange(ng), index)), (ng, nx))
         Aineq_temp[i * nl:(i + 1) * nl, :] = (Distribution_factor * Cg * Cx2g).todense()
         PD_bus = bus[:, PD] * case["Load_profile"][i]
-        bineq_temp[i * nl:(i + 1) * nl] = branch[:, RATE_A] * 100 - Distribution_factor * Cd * PD_bus
+        bineq_temp[i * nl:(i + 1) * nl] = branch[:, RATE_A] - Distribution_factor * Cd * PD_bus
         del index, Cx2g
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     ## build Bbus
     Bbus = Cft.T * Bf
     # The distribution factor
-    Distribution_factor = sparse(Bf * inv(Bbus))
+    Distribution_factor = sparse(linalg.solve(Bbus.toarray().transpose(), Bf.toarray().transpose()).transpose())
 
     Cg = sparse((ones(ng), (gen[:, GEN_BUS], arange(ng))),
                 (nb, ng))  # Sparse index generation method is different from the way of matlab
@@ -319,9 +319,9 @@ if __name__ == "__main__":
     branch_f2t = zeros((nl, T))
     branch_t2f = zeros((nl, T))
     for i in range(T):
-        PD_bus = bus[:, PD] * test_case["Load_profile"][i]
-        branch_f2t[:, i] = Distribution_factor * Cg * sol["Pg"][:, i] - Distribution_factor * Cd * PD_bus
-        branch_t2f[:, i] = -Distribution_factor * Cg * sol["Pg"][:, i] + Distribution_factor * Cd * PD_bus
+        PD_bus = test_case["bus"][:, 1] * test_case["Load_profile"][i]
+        branch_f2t[:, i] = Distribution_factor * (Cg * sol["Pg"][:, i] - Cd * PD_bus)
+        branch_t2f[:, i] = -Distribution_factor * (Cg * sol["Pg"][:, i] - Cd * PD_bus)
 
     plt.plot(sol["Pg"])
     plt.show()
