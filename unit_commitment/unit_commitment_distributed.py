@@ -34,7 +34,7 @@ def problem_formulation(case):
     lb = []
     for i in range(ng):
         lb += [0] * T
-        lb += [gen[i, PG_MIN]] * T
+        lb += [0] * T
     ub = []
     for i in range(ng):
         ub += [1] * T
@@ -67,17 +67,17 @@ def problem_formulation(case):
     # 2.2) Power range limitation
     Aineq = zeros((T * ng, nx))
     bineq = [0] * T * ng
-    for i in range(T):
-        for j in range(ng):
-            Aineq[i + j, j * NX + i] = gen[j, PG_MIN]
-            Aineq[i + j, j * NX + T + i] = -1
+    for i in range(ng):
+        for j in range(T):
+            Aineq[i * T + j, i * NX + j] = gen[i, PG_MIN]
+            Aineq[i * T + j, i * NX + T + j] = -1
 
     Aineq_temp = zeros((T * ng, nx))
     bineq_temp = [0] * T * ng
-    for i in range(T):
-        for j in range(ng):
-            Aineq_temp[i + j, j * NX + i] = -gen[j, PG_MAX]
-            Aineq_temp[i + j, j * NX + T + i] = 1
+    for i in range(ng):
+        for j in range(T):
+            Aineq_temp[i * T + j, i * NX + j] = -gen[i, PG_MAX]
+            Aineq_temp[i * T + j, i * NX + T + j] = 1
 
     # plt.plot(LB[0])
     # plt.show()
@@ -94,6 +94,34 @@ def problem_formulation(case):
     return model
 
 
+def solution_decomposition(xx, obj, success):
+    """
+    Decomposition of objective functions
+    :param xx: Solution
+    :param obj: Objective value
+    :param success: Success or not
+    :return:
+    """
+    T = 24
+    ng = 54
+    result = {}
+    result["success"] = success
+    result["obj"] = obj
+    if success:
+        Ig = zeros((ng, T))
+        Pg = zeros((ng, T))
+        for i in range(ng):
+            Ig[i, :] = xx[2 * i * T:2 * i * T + T]
+            Pg[i, :] = xx[2 * i * T + T:2 * i * T + 2 * T]
+        result["Ig"] = Ig
+        result["Pg"] = Pg
+    else:
+        result["Ig"] = 0
+        result["Pg"] = 0
+
+    return result
+
+
 if __name__ == "__main__":
     from unit_commitment.test_cases import case118
 
@@ -102,5 +130,7 @@ if __name__ == "__main__":
     (xx, obj, success) = miqp(c=model["c"], Q=model["Q"], Aeq=model["Aeq"], A=model["Aineq"], b=model["bineq"],
                               beq=model["beq"], xmin=model["lb"],
                               xmax=model["ub"], vtypes=model["vtypes"])
-    plt.plot(xx)
+    sol = solution_decomposition(xx, obj, success)
+
+    plt.plot(sol["Ig"])
     plt.show()
