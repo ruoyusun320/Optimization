@@ -11,18 +11,22 @@ Due to the limitation on the ramp constraint, the following paper has been selec
 Further ramp constraints can be found in
 [3] A State Transition MIP Formulation for the Unit Commitment Problem
 """
-from numpy import zeros, shape, ones, diag, concatenate, append, matlib
+from numpy import zeros, shape, ones, diag, concatenate, r_, arange
 import matplotlib.pyplot as plt
 from solvers.mixed_integer_quadratic_programming import mixed_integer_quadratic_programming as miqp
 
+from scipy.sparse import csr_matrix as sparse
+from scipy.sparse.linalg import inv
+from pypower import loadcase, ext2int
 
-def problem_formulation(case):
+
+def problem_formulation(case, Distribution_factor, Cg, Cd):
     """
     :param case: The test case for unit commitment problem
     :return:
     """
     from unit_commitment.data_format.data_format import IG, PG
-    from unit_commitment.test_cases.case118 import F_BUS, T_BUS
+    from unit_commitment.test_cases.case118 import F_BUS, T_BUS, BR_X, RATE_A
     from unit_commitment.test_cases.case118 import GEN_BUS, COST_C, COST_B, COST_A, PG_MAX, PG_MIN, I0, MIN_DOWN, \
         MIN_UP, RU, RD, COLD_START
     from unit_commitment.test_cases.case118 import BUS_ID, PD
@@ -33,7 +37,11 @@ def problem_formulation(case):
     gen[:, GEN_BUS] = gen[:, GEN_BUS] - 1
     branch[:, F_BUS] = branch[:, F_BUS] - 1
     branch[:, T_BUS] = branch[:, T_BUS] - 1
+
     ng = shape(case['gen'])[0]  # number of schedule injections
+    nl = shape(case['branch'])[0]  ## number of branches
+    nb = shape(case['bus'])[0]  ## number of branches
+
     u0 = [0] * ng  # The initial generation status
     for i in range(ng):
         u0[i] = int(gen[i, I0] > 0)
@@ -78,6 +86,7 @@ def problem_formulation(case):
         q += [gen[i, COST_A]] * T
 
     Q = diag(q)
+
     # 2) Constraint set
     # 2.1) Power balance equation
     Aeq = zeros((T, nx))
@@ -87,6 +96,7 @@ def problem_formulation(case):
     beq = [0] * T
     for i in range(T):
         beq[i] = case["Load_profile"][i]
+
     # 2.2) Status transformation of each unit
     Aeq_temp = zeros((T * ng, nx))
     beq_temp = [0] * T * ng
@@ -145,6 +155,7 @@ def problem_formulation(case):
             Aineq_temp[sum(DOWN_LIMIT[0:i]) + j - int(gen[i, MIN_DOWN]), i * NX + 2 * T + j] = 1
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
+
     # 2.5) Ramp constraints:
     # 2.5.1) Ramp up limitation
     Aineq_temp = zeros((ng * (T - 1), nx))
@@ -169,12 +180,41 @@ def problem_formulation(case):
             Aineq_temp[i * (T - 1) + j, i * NX + T + j + 1] = -gen[i, PG_MIN]
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
+    # 2.6) Line flow limitation
+    # Add the line flow limitation time by time
+    Aineq_temp = zeros((nl * T, nx))
+    bineq_temp = [0] * nl * T
+    for i in range(T):
+        index = [0] * ng
+        for j in range(ng):
+            index[j] = j * 4 * T + 3 * T + i
+        Cx2g = sparse((ones(ng), (arange(ng), index)), (ng, nx))
+        Aineq_temp[i * nl:(i + 1) * nl, :] = (Distribution_factor * Cg * Cx2g).todense()
+        PD_bus = bus[:, PD] * case["Load_profile"][i]
+        bineq_temp[i * nl:(i + 1) * nl] = branch[:, RATE_A] * 100 + Distribution_factor * Cd * PD_bus
+        del index, Cx2g
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
+
+    Aineq_temp = zeros((nl * T, nx))
+    bineq_temp = [0] * nl * T
+    for i in range(T):
+        index = [0] * ng
+        for j in range(ng):
+            index[j] = j * 4 * T + 3 * T + i
+        Cx2g = sparse((-ones(ng), (arange(ng), index)), (ng, nx))
+        Aineq_temp[i * nl:(i + 1) * nl, :] = (Distribution_factor * Cg * Cx2g).todense()
+        PD_bus = bus[:, PD] * case["Load_profile"][i]
+        bineq_temp[i * nl:(i + 1) * nl] = branch[:, RATE_A] * 100 - Distribution_factor * Cd * PD_bus
+        del index, Cx2g
+    Aineq = concatenate((Aineq, Aineq_temp), axis=0)
+    bineq += bineq_temp
 
     model = {}
     model["c"] = c
     model["Q"] = Q
-    model["Aeq"] = concatenate((Aeq, Aeq_temp), axis=0)
-    model["beq"] = beq + beq_temp
+    model["Aeq"] = Aeq
+    model["beq"] = beq
     model["lb"] = lb
     model["ub"] = ub
     model["Aineq"] = Aineq
@@ -223,11 +263,65 @@ if __name__ == "__main__":
     from unit_commitment.test_cases import case118
 
     test_case = case118.case118()
-    model = problem_formulation(test_case)
+
+    from pypower.case118 import case118
+    from pypower.idx_brch import F_BUS, T_BUS, BR_X, TAP, SHIFT, BR_STATUS, RATE_A
+    from pypower.idx_cost import MODEL, NCOST, PW_LINEAR, COST, POLYNOMIAL
+    from pypower.idx_bus import BUS_TYPE, REF, VA, VM, PD, GS, VMAX, VMIN, BUS_I
+    from pypower.idx_gen import GEN_BUS, VG, PG, QG, PMAX, PMIN, QMAX, QMIN
+    from numpy import flatnonzero as find
+
+    casedata = case118()
+    mpc = loadcase.loadcase(casedata)
+    mpc = ext2int.ext2int(mpc)
+    baseMVA, bus, gen, branch, gencost = mpc["baseMVA"], mpc["bus"], mpc["gen"], mpc["branch"], mpc["gencost"]  #
+
+    nb = shape(mpc['bus'])[0]  ## number of buses
+    nl = shape(mpc['branch'])[0]  ## number of branches
+    ng = shape(mpc['gen'])[0]  ## number of dispatchable injections
+
+    ## Formualte the
+    stat = branch[:, BR_STATUS]  ## ones at in-service branches
+    b = stat / branch[:, BR_X]  ## series susceptance
+    tap = ones(nl)  ## default tap ratio = 1
+    i = find(branch[:, TAP])  ## indices of non-zero tap ratios
+    tap[i] = branch[i, TAP]  ## assign non-zero tap ratios
+
+    ## build connection matrix Cft = Cf - Ct for line and from - to buses
+    f = branch[:, F_BUS]  ## list of "from" buses
+    t = branch[:, T_BUS]  ## list of "to" buses
+    i = r_[range(nl), range(nl)]  ## double set of row indices
+    ## connection matrix
+    Cft = sparse((r_[ones(nl), -ones(nl)], (i, r_[f, t])), (nl, nb))
+
+    ## build Bf such that Bf * Va is the vector of real branch powers injected
+    ## at each branch's "from" bus
+    Bf = sparse((r_[b, -b], (i, r_[f, t])), shape=(nl, nb))  ## = spdiags(b, 0, nl, nl) * Cft
+
+    ## build Bbus
+    Bbus = Cft.T * Bf
+    # The distribution factor
+    Distribution_factor = sparse(Bf * inv(Bbus))
+
+    Cg = sparse((ones(ng), (gen[:, GEN_BUS], arange(ng))),
+                (nb, ng))  # Sparse index generation method is different from the way of matlab
+    Cd = sparse((ones(nb), (bus[:, BUS_I], arange(nb))), (nb, nb))  # Sparse index load
+
+    model = problem_formulation(test_case, Distribution_factor, Cg, Cd)
     (xx, obj, success) = miqp(c=model["c"], Q=model["Q"], Aeq=model["Aeq"], A=model["Aineq"], b=model["bineq"],
                               beq=model["beq"], xmin=model["lb"],
                               xmax=model["ub"], vtypes=model["vtypes"])
     sol = solution_decomposition(xx, obj, success)
+
+    T = 24
+    nx = 4 * T * ng
+    # check the branch power flow
+    branch_f2t = zeros((nl, T))
+    branch_t2f = zeros((nl, T))
+    for i in range(T):
+        PD_bus = bus[:, PD] * test_case["Load_profile"][i]
+        branch_f2t[:, i] = Distribution_factor * Cg * sol["Pg"][:, i] - Distribution_factor * Cd * PD_bus
+        branch_t2f[:, i] = -Distribution_factor * Cg * sol["Pg"][:, i] + Distribution_factor * Cd * PD_bus
 
     plt.plot(sol["Pg"])
     plt.show()
