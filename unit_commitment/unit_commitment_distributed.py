@@ -3,6 +3,10 @@ Basic unit commitment to some mix-integer linear/quadratic programming problem
 @author: Zhao Tianyang
 @e-mail: zhaoty@ntu.edu.sg
 @date:6 Mar 2018
+
+Note: The mathematical model is taken from the following references.
+[1]Tight and Compact MILP Formulation of Start-Up and Shut-Down Ramping in Unit Commitment
+
 """
 from numpy import zeros, shape, ones, diag, concatenate, append, matlib
 import matplotlib.pyplot as plt
@@ -78,9 +82,8 @@ def problem_formulation(case):
         for j in range(T):
             Aineq_temp[i * T + j, i * NX + j] = -gen[i, PG_MAX]
             Aineq_temp[i * T + j, i * NX + T + j] = 1
+    # 2.3) Start up and shut down time limitation
 
-    # plt.plot(LB[0])
-    # plt.show()
     model = {}
     model["c"] = c
     model["Q"] = Q
