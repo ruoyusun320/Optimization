@@ -10,13 +10,16 @@ Due to the limitation on the ramp constraint, the following paper has been selec
 [2]Tight mixed integer linear programming formulations for the unit commitment problem
 Further ramp constraints can be found in
 [3] A State Transition MIP Formulation for the Unit Commitment Problem
+
+Important note:
+1) If you are familiar with Matlab, you are strongly recommended to know the differences between Matlab and numpy, which you can found in the following link.
+https://docs.scipy.org/doc/numpy-dev/user/numpy-for-matlab-users.html
 """
 from numpy import zeros, shape, ones, diag, concatenate, r_, arange, divide, linalg
 import matplotlib.pyplot as plt
 from solvers.mixed_integer_quadratic_programming import mixed_integer_quadratic_programming as miqp
 
 from scipy.sparse import csr_matrix as sparse
-from scipy.sparse.linalg import inv
 from pypower import loadcase, ext2int
 
 
@@ -231,6 +234,7 @@ def problem_formulation(case):
         del index, Cx2g
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
+
 
     model = {}
     model["c"] = c
