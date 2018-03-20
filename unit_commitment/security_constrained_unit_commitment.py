@@ -167,8 +167,8 @@ def problem_formulation(case):
         for j in range(T - 1):
             Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j + 1] = 1
             Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j] = -1
-            Aineq_temp[i * (T - 1) + j, i * NX + 2 * T + j] = -gen[i, RU]
-            Aineq_temp[i * (T - 1) + j, i * NX + j] = -gen[i, PG_MAX]
+            Aineq_temp[i * (T - 1) + j, i * NX + j + 1] = gen[i, RU] - gen[i, PG_MIN]
+            bineq_temp[i * (T - 1) + j] = gen[i, RU]
 
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
@@ -179,8 +179,8 @@ def problem_formulation(case):
         for j in range(T - 1):
             Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j + 1] = -1
             Aineq_temp[i * (T - 1) + j, i * NX + 3 * T + j] = 1
-            Aineq_temp[i * (T - 1) + j, i * NX + 2 * T + j + 1] = -gen[i, RD]
-            Aineq_temp[i * (T - 1) + j, i * NX + T + j + 1] = -gen[i, PG_MIN]
+            Aineq_temp[i * (T - 1) + j, i * NX + T + j + 1] = gen[i, RD] - gen[i, PG_MIN]
+            bineq_temp[i * (T - 1) + j] = gen[i, RD]
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
     # 2.6) Line flow limitation
@@ -234,7 +234,6 @@ def problem_formulation(case):
         del index, Cx2g
     Aineq = concatenate((Aineq, Aineq_temp), axis=0)
     bineq += bineq_temp
-
 
     model = {}
     model["c"] = c
