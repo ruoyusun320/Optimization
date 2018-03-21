@@ -1,15 +1,11 @@
 """
-Basic unit commitment to some mix-integer linear/quadratic programming problem
+Augumented Lagrange decomposition for basic unit commitment problems
 @author: Zhao Tianyang
 @e-mail: zhaoty@ntu.edu.sg
-@date:6 Mar 2018
+@date:21 Mar 2018
 
 Note: The mathematical model is taken from the following references.
-[1]Tight and Compact MILP Formulation of Start-Up and Shut-Down Ramping in Unit Commitment
-Due to the limitation on the ramp constraint, the following paper has been selected as the reference.
-[2]Tight mixed integer linear programming formulations for the unit commitment problem
-Further ramp constraints can be found in
-[3] A State Transition MIP Formulation for the Unit Commitment Problem
+[1]
 """
 from numpy import zeros, shape, ones, diag, concatenate, r_, arange, divide, linalg
 import matplotlib.pyplot as plt
