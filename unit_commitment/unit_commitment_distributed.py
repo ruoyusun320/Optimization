@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 from solvers.mixed_integer_quadratic_programming import mixed_integer_quadratic_programming as miqp
 
 from scipy.sparse import csr_matrix as sparse
-from scipy.sparse.linalg import inv
 from pypower import loadcase, ext2int
 
 
