@@ -1,8 +1,12 @@
 """
 To test the functions of unit commitment problems
 """
-from pypower import case118
-from pypower.runopf import runopf
+def test_assert(cmd):
+    try:
+        assert cmd in {'ISOLATE_CMD', 'CONNECT_CMD'}
+        print(0)
+    except AssertionError:
+        print(1)
 
-
-runopf(case118.case118())
+if __name__=="__main__":
+    test_assert('CMD')
